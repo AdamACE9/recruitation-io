@@ -46,6 +46,7 @@ export function AppShell({ kind }: { kind: 'agency' | 'candidate' | 'admin' }) {
   ] : [
     { to: '/admin', label: 'Overview' },
     { to: '/admin/agencies', label: 'Agencies' },
+    { to: '/admin/interviews', label: 'Interviews' },
     { to: '/admin/credits', label: 'Credits' },
     { to: '/admin/activity', label: 'Activity' },
   ];

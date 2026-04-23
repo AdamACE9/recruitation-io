@@ -397,6 +397,11 @@ export const analyzeInterview = onCall(
     if (!appSnap.exists) throw new HttpsError('not-found', 'Application missing');
     const app = appSnap.data()!;
 
+    // Idempotency guard — prevent double credit deduction if called twice
+    if (['under_review', 'approved', 'rejected'].includes(app.status)) {
+      return { ok: true, report: app.report, alreadyAnalyzed: true };
+    }
+
     const [jobSnap, candSnap] = await Promise.all([
       db.collection('jobs').doc(app.jobId).get(),
       db.collection('candidates').doc(app.candidateUid).get(),
@@ -626,5 +631,35 @@ export const fetchElevenLabsTranscript = onCall(
 
     await db.collection('applications').doc(applicationId).update(patch);
     return { ok: true, hasAudio: Boolean(data.audio_url) };
+  },
+);
+
+// ============================================================
+// 7. extractInstitutions  (Gemini — called by Verify page)
+// ============================================================
+export const extractInstitutions = onCall(
+  { secrets: [GEMINI_KEY], region: 'us-central1' },
+  async (req) => {
+    requireAuth(req.auth);
+    const { applicationId } = z.object({ applicationId: z.string() }).parse(req.data);
+
+    const appSnap = await db.collection('applications').doc(applicationId).get();
+    if (!appSnap.exists) throw new HttpsError('not-found', 'Application missing');
+    const transcript = (appSnap.data()?.transcriptOriginal ?? '') as string;
+
+    if (!transcript.trim()) return { institutions: [] };
+
+    const gemini = new GoogleGenerativeAI(GEMINI_KEY.value());
+    const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const result = await model.generateContent(
+      `Extract all schools, universities, colleges, and company names mentioned in this interview transcript.
+Return a JSON array of strings only, no duplicates, max 10 names. If none found, return [].
+Transcript:\n\n${transcript.slice(0, 20_000)}`,
+    );
+    const raw = result.response.text().trim().replace(/^```json|```$/g, '').trim();
+    const match = raw.match(/\[[\s\S]*?\]/);
+    let institutions: string[] = [];
+    try { institutions = match ? JSON.parse(match[0]) : []; } catch { institutions = []; }
+    return { institutions: (institutions as string[]).filter((s) => typeof s === 'string').slice(0, 10) };
   },
 );

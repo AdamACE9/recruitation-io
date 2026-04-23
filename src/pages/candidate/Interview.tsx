@@ -170,7 +170,7 @@ export default function Interview() {
         }, 3000);
       }
 
-      setTimeout(() => nav(`/thanks/${app?.id ?? ''}`), 900);
+      setTimeout(() => nav(`/verify/${app?.id ?? ''}`), 900);
     } catch (e) {
       // CRITICAL: don't silently swallow — the interview was not saved
       console.error('[Interview] finalizeInterview failed:', e instanceof Error ? e.message : e);

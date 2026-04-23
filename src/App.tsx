@@ -40,6 +40,7 @@ import BrowseJobs from '@/pages/candidate/BrowseJobs';
 import Apply from '@/pages/candidate/Apply';
 import Interview from '@/pages/candidate/Interview';
 import ThankYou from '@/pages/candidate/ThankYou';
+import Verify from '@/pages/candidate/Verify';
 import Profile from '@/pages/candidate/Profile';
 
 // Admin
@@ -47,6 +48,7 @@ import AdminDashboard from '@/pages/admin/AdminDashboard';
 import AdminAgencies from '@/pages/admin/Agencies';
 import AdminCredits from '@/pages/admin/Credits';
 import AdminActivity from '@/pages/admin/Activity';
+import AllApplications from '@/pages/admin/AllApplications';
 
 export default function App() {
   return (
@@ -71,7 +73,8 @@ export default function App() {
           <Route path="/:agencySlug/:jobSlug" element={<Apply />} />
           <Route path="/jobs-open" element={<BrowseJobs />} />
 
-          {/* ——— Candidate post-interview (auth not strictly required for thanks) ——— */}
+          {/* ——— Candidate post-interview (auth not strictly required for thanks/verify) ——— */}
+          <Route path="/verify/:id" element={<Verify />} />
           <Route path="/thanks/:id" element={<ThankYou />} />
 
           {/* ——— Candidate live interview (public — candidates arrive unauthenticated) ——— */}
@@ -102,6 +105,8 @@ export default function App() {
           <Route element={<RequireAdmin><AppShell kind="admin" /></RequireAdmin>}>
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/agencies" element={<AdminAgencies />} />
+            <Route path="/admin/interviews" element={<AllApplications />} />
+            <Route path="/admin/reports/:id" element={<Report />} />
             <Route path="/admin/credits" element={<AdminCredits />} />
             <Route path="/admin/activity" element={<AdminActivity />} />
           </Route>

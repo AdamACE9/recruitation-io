@@ -108,9 +108,12 @@ export async function finalizeInterview(appId: string, transcript: string, conve
     ...(conversationId ? { conversationId } : {}),
     ...(audioUrl ? { audioUrl } : {}),
   });
-  // credits deducted inside the Function after analysis succeeds
-  const call = httpsCallable(firebaseFunctions(), 'analyzeInterview');
-  await call({ applicationId: appId });
+  // Fire-and-forget — credits deducted inside the Function after success
+  // The Verify page also calls triggerAnalysis; idempotency guard prevents double charge
+  const analysisCall = httpsCallable(firebaseFunctions(), 'analyzeInterview');
+  analysisCall({ applicationId: appId }).catch((e: unknown) => {
+    console.warn('[finalizeInterview] background analysis failed:', e instanceof Error ? e.message : e);
+  });
 }
 
 /**
@@ -126,6 +129,14 @@ export async function enrichWithOfficialTranscript(appId: string, conversationId
   } catch (e) {
     console.warn('[enrichWithOfficialTranscript] best-effort call failed:', e instanceof Error ? e.message : e);
   }
+}
+
+/** Trigger AI analysis (Gemini + Claude pipeline). Fire-and-forget. Idempotency-safe. */
+export async function triggerAnalysis(appId: string): Promise<void> {
+  const call = httpsCallable(firebaseFunctions(), 'analyzeInterview');
+  call({ applicationId: appId }).catch((e: unknown) => {
+    console.warn('[triggerAnalysis]', e instanceof Error ? e.message : e);
+  });
 }
 
 // (Re)expose helper so UI components can directly call:

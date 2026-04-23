@@ -12,6 +12,8 @@
 
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { firebaseStorage } from '@/lib/firebase';
 import { getAgencyBySlug } from '@/services/agencies';
 import { listActiveJobsByAgency } from '@/services/jobs';
 import {
@@ -19,6 +21,7 @@ import {
   prepareInterview,
   listenApplication,
 } from '@/services/applications';
+import { updateCandidate } from '@/services/candidates';
 import { useAuth } from '@/contexts/AuthContext';
 import { applyBrand } from '@/lib/theme';
 import type { Agency, Application, InterviewPrepStatus, Job } from '@/lib/types';
@@ -56,6 +59,8 @@ export default function Apply() {
   // Application lifecycle state
   const [appId, setAppId] = useState<string | null>(null);
   const [prep, setPrep] = useState<Application['interviewPrep'] | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (!agencySlug) return;
@@ -84,6 +89,13 @@ export default function Apply() {
     return <div style={{ padding: 48 }} className="t-center muted">Role is no longer open.</div>;
   }
 
+  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
+
   async function startInterview() {
     if (!job) return;
     if (!user || role !== 'candidate' || !candidate) {
@@ -92,6 +104,20 @@ export default function Apply() {
     }
     setLoading(true);
     try {
+      // Upload photo if candidate doesn't have one yet
+      let photoUrl = candidate.photoUrl;
+      if (photoFile && candidate.uid) {
+        try {
+          const storage = firebaseStorage();
+          const r = storageRef(storage, `candidates/${candidate.uid}/photo-${Date.now()}-${photoFile.name}`);
+          await uploadBytes(r, photoFile, { contentType: photoFile.type });
+          photoUrl = await getDownloadURL(r);
+          await updateCandidate(candidate.uid, { photoUrl });
+        } catch (photoErr) {
+          console.warn('[Apply] photo upload failed (non-blocking):', photoErr instanceof Error ? photoErr.message : photoErr);
+        }
+      }
+
       const app = await createApplication({
         agencyId: job.agencyId,
         jobId: job.id,
@@ -100,7 +126,7 @@ export default function Apply() {
         candidateName: candidate.name,
         candidateEmail: candidate.email,
         candidatePhone: candidate.phone,
-        candidatePhotoUrl: candidate.photoUrl,
+        candidatePhotoUrl: photoUrl,
       });
       setAppId(app.id);
       setPrep({ status: 'pending', questions: [], updatedAt: Date.now() });
@@ -184,6 +210,58 @@ export default function Apply() {
 
         {!showPrep && (
           <>
+            {candidate && !candidate.photoUrl && (
+              <div className="card" style={{ marginTop: 20 }}>
+                <div className="lbl-sm">Profile photo <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></div>
+                <div className="muted small" style={{ marginTop: 4 }}>
+                  Agencies see your photo alongside your report. You can skip this.
+                </div>
+                <div className="row-flex" style={{ marginTop: 14, gap: 14, alignItems: 'center' }}>
+                  {photoPreview ? (
+                    <img
+                      src={photoPreview}
+                      alt="preview"
+                      style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--brand)' }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: 56, height: 56, borderRadius: '50%',
+                      background: 'var(--surface-2)', border: '2px dashed var(--border-soft)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
+                    }}>👤</div>
+                  )}
+                  <div>
+                    <label
+                      htmlFor="photo-upload"
+                      style={{
+                        cursor: 'pointer', padding: '6px 14px', borderRadius: 8,
+                        border: '1px solid var(--border-soft)', background: 'var(--surface-2)',
+                        fontSize: 13, fontWeight: 500,
+                      }}
+                    >
+                      {photoPreview ? 'Change photo' : 'Upload photo'}
+                    </label>
+                    <input
+                      id="photo-upload"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      style={{ display: 'none' }}
+                      onChange={handlePhotoSelect}
+                    />
+                    {photoPreview && (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ marginLeft: 8 }}
+                        onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="card" style={{ marginTop: 20, background: 'var(--brand-50)', borderColor: 'transparent' }}>
               <div className="lbl-sm" style={{ color: 'var(--brand)' }}>What happens next</div>
               <ol style={{ marginTop: 10, paddingLeft: 20, lineHeight: 1.8 }}>
