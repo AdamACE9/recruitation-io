@@ -1,0 +1,98 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ------- helpers -------
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { return isSignedIn() && request.auth.token.admin == true; }
+    function isSelf(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function isActiveAgency() {
+      return isSignedIn() && exists(/databases/$(database)/documents/agencies/$(request.auth.uid))
+        && get(/databases/$(database)/documents/agencies/$(request.auth.uid)).data.status == 'active';
+    }
+
+    // ------- agencies -------
+    match /agencies/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSelf(id);
+      allow update: if isSelf(id) && request.resource.data.status == resource.data.status
+                    && request.resource.data.credits == resource.data.credits;
+      allow write: if isAdmin();
+    }
+
+    // Slug → agencyId index (public read, owner-only write)
+    match /agencies_by_slug/{slug} {
+      allow read: if true;
+      // Only the agency whose UID matches the agencyId field can create the slug entry
+      allow create: if isSignedIn() && request.resource.data.agencyId == request.auth.uid;
+      // Agency may update its own slug doc but cannot re-point it to a different agency
+      allow update: if isSignedIn() && resource.data.agencyId == request.auth.uid
+                    && request.resource.data.agencyId == resource.data.agencyId;
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.agencyId == request.auth.uid);
+    }
+
+    // ------- candidates -------
+    match /candidates/{uid} {
+      allow read: if isSelf(uid) || isAdmin() || isActiveAgency();
+      allow create, update: if isSelf(uid);
+      allow delete: if isAdmin();
+    }
+
+    // ------- jobs -------
+    match /jobs/{id} {
+      allow read: if true; // jobs are public for candidate browsing
+      allow create: if isActiveAgency() && request.resource.data.agencyId == request.auth.uid;
+      // Require active agency status to modify/delete (prevents suspended agencies from editing)
+      allow update, delete: if isActiveAgency() && resource.data.agencyId == request.auth.uid;
+
+      match /testQuestions/{qid} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn()
+          && get(/databases/$(database)/documents/jobs/$(id)).data.agencyId == request.auth.uid;
+      }
+    }
+
+    // ------- applications -------
+    match /applications/{id} {
+      allow read: if isSignedIn() && (
+        resource.data.candidateUid == request.auth.uid ||
+        resource.data.agencyId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isSignedIn() && request.resource.data.candidateUid == request.auth.uid;
+
+      // Field-level update restrictions:
+      //   Candidate  — may write transcript, audioUrl, status (interview transitions)
+      //               but NEVER interviewPrep, report, approvedAt (Cloud Function only)
+      //   Agency     — may only write status (rejected), completedAt, rejectionMessage
+      //               (approval goes through sendSelectionEmail Cloud Function)
+      //   Admin SDK  — bypasses these rules entirely (used by Cloud Functions)
+      allow update: if isSignedIn() && (
+        (resource.data.candidateUid == request.auth.uid
+         && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['interviewPrep', 'report', 'approvedAt', 'agencyId', 'candidateUid', 'jobId']))
+        ||
+        (resource.data.agencyId == request.auth.uid
+         && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'completedAt', 'rejectionMessage']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ------- credit ledger -------
+    match /creditTransactions/{id} {
+      allow read: if isSignedIn() && (
+        resource.data.agencyId == request.auth.uid || isAdmin()
+      );
+      // Client may only create a transaction for their own agency (e.g. admin top-up UI)
+      allow create: if isSignedIn() && request.resource.data.agencyId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // ------- default deny -------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

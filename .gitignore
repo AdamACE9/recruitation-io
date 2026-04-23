@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+.env.local
+.firebase
+firebase-debug.log
+*.log
+.DS_Store
+.vscode
+.idea
+functions/node_modules
+functions/lib

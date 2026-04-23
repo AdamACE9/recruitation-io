@@ -1,0 +1,42 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() { return request.auth != null; }
+    function isSelf(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function isAdmin() { return isSignedIn() && request.auth.token.admin == true; }
+    function isImage() { return request.resource.contentType.matches('image/.*'); }
+    function isPdf() { return request.resource.contentType == 'application/pdf'; }
+    function under(size) { return request.resource.size < size; }
+
+    // Agency brand assets (logo, etc.) — owner-only write
+    match /agencies/{uid}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isSelf(uid) && (isImage() || isPdf()) && under(10 * 1024 * 1024);
+    }
+
+    // Candidate CVs / profile photos — private to owner
+    match /candidates/{uid}/{allPaths=**} {
+      allow read: if isSelf(uid) || isAdmin();
+      allow write: if isSelf(uid) && (isImage() || isPdf()) && under(20 * 1024 * 1024);
+    }
+
+    // Job files (handbook PDFs, test-question images) — public read, active-agency write only
+    // Write requires caller to be an active agency (agencies/{uid}.status == 'active').
+    // Ownership to a specific job is enforced server-side on job creation; the Firestore
+    // job document may not exist yet when the handbook is uploaded during NewJob flow,
+    // so we gate on active-agency status rather than per-job ownership.
+    match /jobs/{jobId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isSignedIn()
+                   && (isImage() || isPdf())
+                   && under(20 * 1024 * 1024)
+                   && firestore.exists(/databases/(default)/documents/agencies/$(request.auth.uid))
+                   && firestore.get(/databases/(default)/documents/agencies/$(request.auth.uid)).data.status == 'active';
+    }
+
+    // Catch-all deny
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}
