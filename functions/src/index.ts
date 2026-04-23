@@ -14,7 +14,8 @@
 //   - Approval            :  2 credits (in sendSelectionEmail)
 //
 // Secrets: GEMINI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY,
-//          GOOGLE_CSE_KEY, GOOGLE_CSE_ID, RESEND_API_KEY, APP_URL
+//          GOOGLE_CSE_KEY, GOOGLE_CSE_ID, RESEND_API_KEY, APP_URL,
+//          ELEVENLABS_API_KEY
 // ============================================================
 
 import * as admin from 'firebase-admin';
@@ -36,6 +37,7 @@ const GOOGLE_CSE_KEY = defineSecret('GOOGLE_CSE_KEY');
 const GOOGLE_CSE_ID = defineSecret('GOOGLE_CSE_ID');
 const RESEND_KEY = defineSecret('RESEND_API_KEY');
 const APP_URL = defineSecret('APP_URL');
+const ELEVENLABS_KEY = defineSecret('ELEVENLABS_API_KEY');
 
 // ------------------------------------------------------------
 // Helpers
@@ -405,9 +407,9 @@ export const analyzeInterview = onCall(
     const gemini = new GoogleGenerativeAI(GEMINI_KEY.value());
     const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY.value() });
 
-    // Stage 1 — Gemini scores 4 axes + identifies inconsistencies
+    // Stage 1 — Gemini scores 4 axes + identifies inconsistencies + extracts candidate profile
     const scoringPrompt = `You are an expert recruiter evaluator. Score the candidate across 4 axes (0-100 each):
-qualification, communication, confidence, roleFit. Extract red flags and CV inconsistencies.
+qualification, communication, confidence, roleFit. Extract red flags, CV inconsistencies, and structured profile data.
 
 Job title: ${app.jobTitle}
 Job description: ${job?.jobConfig?.description ?? ''}
@@ -421,7 +423,16 @@ Respond with strict JSON:
   "scores": { "qualification": number, "communication": number, "confidence": number, "roleFit": number },
   "summary": string,
   "redFlags": string[],
-  "inconsistencies": [{ "claim": string, "source": "linkedin" | "cv", "spoken": string, "severity": "low" | "medium" | "high" }]
+  "inconsistencies": [{ "claim": string, "source": "linkedin" | "cv", "spoken": string, "severity": "low" | "medium" | "high" }],
+  "extractedProfile": {
+    "currentRole": string,
+    "desiredRole": string,
+    "yearsOfExperience": string,
+    "currentSalary": string,
+    "salaryExpectation": string,
+    "currentCountry": string,
+    "skills": string[]
+  }
 }`;
     const scoreModel = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const scoreRaw = (await scoreModel.generateContent(scoringPrompt)).response.text()
@@ -487,10 +498,19 @@ Return strict JSON:
     // without payment (e.g. if the update below throws after the write).
     await deductCredits(app.agencyId, 5, 'interview', `Interview ${applicationId}`);
 
+    // Flatten extractedProfile fields onto the application doc for pipeline filtering
+    const profile = scoreJson.extractedProfile ?? {};
+    const profilePatch: Record<string, unknown> = {};
+    const profileFields = ['currentRole', 'desiredRole', 'yearsOfExperience', 'currentSalary', 'salaryExpectation', 'currentCountry', 'skills'] as const;
+    for (const f of profileFields) {
+      if (profile[f] !== undefined && profile[f] !== '') profilePatch[`extractedProfile.${f}`] = profile[f];
+    }
+
     await appRef.update({
       report,
       status: 'under_review',
       transcriptEnglish: app.transcriptOriginal, // placeholder until translation wired
+      ...profilePatch,
     });
     return { ok: true, report };
   },
@@ -557,5 +577,54 @@ ${handbookBlock}
 <p style="color:#6b7280;font-size:13px;margin-top:28px">— ${agency?.name ?? 'Recruitation'} (via Recruitation.io)</p>`,
     });
     return { ok: true };
+  },
+);
+
+// ============================================================
+// 6. fetchElevenLabsTranscript  (official transcript + audio)
+// ------------------------------------------------------------
+// Called client-side immediately after the interview ends.
+// Fetches the official server-side transcript and audio URL from
+// ElevenLabs, then patches the application document so:
+//   • audioUrl           — playable in Report.tsx
+//   • transcriptOfficial — reliable server-side version
+// This is best-effort: analyzeInterview already ran on the on-device
+// transcript. This enriches the record with the authoritative data.
+// ElevenLabs may take a few seconds to finalize after the call ends,
+// so Interview.tsx fires this with a 3-second delay.
+// ============================================================
+export const fetchElevenLabsTranscript = onCall(
+  { secrets: [ELEVENLABS_KEY], region: 'us-central1' },
+  async (req) => {
+    requireAuth(req.auth);
+    const { applicationId, conversationId } = z.object({
+      applicationId: z.string(),
+      conversationId: z.string().min(1),
+    }).parse(req.data);
+
+    const res = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversations/${encodeURIComponent(conversationId)}`,
+      { headers: { 'xi-api-key': ELEVENLABS_KEY.value() } },
+    );
+    if (!res.ok) {
+      // Non-fatal — ElevenLabs may not have processed the conversation yet.
+      throw new HttpsError('not-found', `ElevenLabs API returned ${res.status}`);
+    }
+    const data = await res.json() as {
+      transcript?: Array<{ role: string; message: string; time_in_call_secs?: number }>;
+      audio_url?: string;
+    };
+
+    const messages = Array.isArray(data.transcript) ? data.transcript : [];
+    const officialTranscript = messages
+      .map((m) => `${m.role === 'agent' ? 'Agent' : 'Candidate'}: ${m.message ?? ''}`)
+      .join('\n');
+
+    const patch: Record<string, unknown> = { conversationId };
+    if (officialTranscript) patch.transcriptOfficial = officialTranscript;
+    if (data.audio_url) patch.audioUrl = data.audio_url;
+
+    await db.collection('applications').doc(applicationId).update(patch);
+    return { ok: true, hasAudio: Boolean(data.audio_url) };
   },
 );

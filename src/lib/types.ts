@@ -217,6 +217,16 @@ export interface AnalysisReport {
   generatedAt: number;
 }
 
+export interface ExtractedProfile {
+  currentRole?: string;
+  desiredRole?: string;
+  yearsOfExperience?: string;
+  currentSalary?: string;
+  salaryExpectation?: string;
+  currentCountry?: string;
+  skills?: string[];
+}
+
 export interface Application {
   id: string;
   agencyId: string;
@@ -232,7 +242,11 @@ export interface Application {
   completedAt?: number;
   transcriptOriginal?: string;
   transcriptEnglish?: string;
+  /** Official server-side transcript fetched from ElevenLabs API after the interview */
+  transcriptOfficial?: string;
   audioUrl?: string;
+  /** ElevenLabs conversation ID — used to fetch official transcript + audio */
+  conversationId?: string;
   report?: AnalysisReport;
   interviewLanguage?: string;
   /** Personalised rejection feedback drafted+sent by the agency */
@@ -240,6 +254,8 @@ export interface Application {
   /** Interview prep pipeline state — lives on the Application (single doc is simpler) */
   interviewPrep?: InterviewPrep;
   approvedAt?: number;
+  /** Structured candidate profile extracted during interview analysis */
+  extractedProfile?: ExtractedProfile;
 }
 
 export interface CreditTransaction {

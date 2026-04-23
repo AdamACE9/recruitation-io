@@ -16,7 +16,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getApplication, finalizeInterview, updateApplication } from '@/services/applications';
+import { getApplication, finalizeInterview, updateApplication, enrichWithOfficialTranscript } from '@/services/applications';
 import { getJob } from '@/services/jobs';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Application, Job, TailoredQuestion } from '@/lib/types';
@@ -147,6 +147,10 @@ export default function Interview() {
     endedRef.current = true;
     setStatus('ending');
 
+    // Capture the ElevenLabs conversationId before ending the session.
+    // The `getId()` method is available on the @elevenlabs/client Conversation object.
+    const conversationId: string | undefined = convRef.current?.getId?.() as string | undefined;
+
     if (convRef.current?.endSession) {
       try { await convRef.current.endSession(); } catch (e) {
         console.warn('[Interview] endSession error:', e instanceof Error ? e.message : e);
@@ -155,8 +159,17 @@ export default function Interview() {
 
     const transcript = messages.map((m) => `${m.role === 'agent' ? 'Agent' : 'Candidate'}: ${m.text}`).join('\n');
     try {
-      if (app) await finalizeInterview(app.id, transcript);
+      if (app) await finalizeInterview(app.id, transcript, conversationId);
       setStatus('done');
+
+      // Best-effort: fetch official transcript + audio URL from ElevenLabs after a short
+      // delay (ElevenLabs needs ~3s to finalise the recording server-side). Fire & forget.
+      if (app && conversationId) {
+        setTimeout(() => {
+          enrichWithOfficialTranscript(app.id, conversationId).catch(() => {/* swallowed */});
+        }, 3000);
+      }
+
       setTimeout(() => nav(`/thanks/${app?.id ?? ''}`), 900);
     } catch (e) {
       // CRITICAL: don't silently swallow — the interview was not saved

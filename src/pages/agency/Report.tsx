@@ -312,6 +312,39 @@ export default function Report() {
             </section>
           )}
 
+          {app.extractedProfile && Object.values(app.extractedProfile).some(Boolean) && (
+            <section className="card">
+              <div className="lbl-sm">Extracted profile</div>
+              <div className="stack stack-2" style={{ marginTop: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+                  {([
+                    ['Current role', app.extractedProfile.currentRole],
+                    ['Desired role', app.extractedProfile.desiredRole],
+                    ['Experience', app.extractedProfile.yearsOfExperience],
+                    ['Current salary', app.extractedProfile.currentSalary],
+                    ['Salary expectation', app.extractedProfile.salaryExpectation],
+                    ['Country', app.extractedProfile.currentCountry],
+                  ] as const).map(([label, val]) => val ? (
+                    <div key={label}>
+                      <div className="lbl-sm" style={{ fontSize: 10 }}>{label}</div>
+                      <div className="small" style={{ marginTop: 2 }}>{val}</div>
+                    </div>
+                  ) : null)}
+                </div>
+                {app.extractedProfile.skills && app.extractedProfile.skills.length > 0 && (
+                  <div>
+                    <div className="lbl-sm" style={{ fontSize: 10 }}>Skills</div>
+                    <div className="row-flex" style={{ flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                      {app.extractedProfile.skills.map((s, i) => (
+                        <span key={i} style={{ padding: '2px 8px', borderRadius: 999, background: 'var(--surface-2)', border: '1px solid var(--border-soft)', fontSize: 12 }}>{s}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
           {r.voiceAuthenticity != null && (
             <section className="card">
               <div className="row-between">
@@ -326,10 +359,14 @@ export default function Report() {
             </section>
           )}
 
-          {view.transcriptEnglish && (
+          {(view.transcriptEnglish || app.transcriptOfficial) && (
             <section className="card">
-              <div className="lbl-sm">Transcript (English)</div>
-              <pre style={{ whiteSpace: 'pre-wrap', marginTop: 8, fontSize: 13, lineHeight: 1.65 }}>{view.transcriptEnglish}</pre>
+              <div className="lbl-sm">
+                Transcript{app.transcriptOfficial ? ' (official · from ElevenLabs)' : ' (English)'}
+              </div>
+              <pre style={{ whiteSpace: 'pre-wrap', marginTop: 8, fontSize: 13, lineHeight: 1.65 }}>
+                {app.transcriptOfficial ?? view.transcriptEnglish}
+              </pre>
             </section>
           )}
 

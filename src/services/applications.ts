@@ -101,15 +101,31 @@ export async function rejectApplication(appId: string, rejectionMessage?: string
 }
 
 /** Triggered client-side after interview ends — Function runs Gemini+Claude pipeline */
-export async function finalizeInterview(appId: string, transcript: string, audioUrl?: string) {
+export async function finalizeInterview(appId: string, transcript: string, conversationId?: string, audioUrl?: string) {
   await updateApplication(appId, {
     status: 'interview_complete',
     transcriptOriginal: transcript,
-    audioUrl,
+    ...(conversationId ? { conversationId } : {}),
+    ...(audioUrl ? { audioUrl } : {}),
   });
   // credits deducted inside the Function after analysis succeeds
   const call = httpsCallable(firebaseFunctions(), 'analyzeInterview');
   await call({ applicationId: appId });
+}
+
+/**
+ * Fire-and-forget: fetches the official ElevenLabs transcript + audio URL
+ * and patches the application document. Should be called with a short delay
+ * (~3s) after the interview ends so ElevenLabs has time to finalise the recording.
+ * Failures are silently swallowed — this is a best-effort enrichment.
+ */
+export async function enrichWithOfficialTranscript(appId: string, conversationId: string): Promise<void> {
+  try {
+    const call = httpsCallable(firebaseFunctions(), 'fetchElevenLabsTranscript');
+    await call({ applicationId: appId, conversationId });
+  } catch (e) {
+    console.warn('[enrichWithOfficialTranscript] best-effort call failed:', e instanceof Error ? e.message : e);
+  }
 }
 
 // (Re)expose helper so UI components can directly call:
