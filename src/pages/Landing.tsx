@@ -504,7 +504,7 @@ export default function Landing() {
               <a href="#pricing"  className="land-nl" style={{ color:T.td }}>Pricing</a>
             </div>
             <div style={{ display:'flex', gap:10 }}>
-              <Link to="/login"          className="land-btn-g" style={{ border:`1px solid ${T.ghost}`, color:T.ghostT }}>Log in</Link>
+              <Link to="/login/agency"   className="land-btn-g" style={{ border:`1px solid ${T.ghost}`, color:T.ghostT }}>Log in</Link>
               <Link to="/signup/agency"  className="land-btn-p">Start free →</Link>
             </div>
           </div>
