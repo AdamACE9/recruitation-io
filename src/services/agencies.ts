@@ -4,13 +4,14 @@
 
 import {
   collection, doc, getDoc, getDocs, limit, orderBy, query, serverTimestamp,
-  setDoc, updateDoc, where,
+  where,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, type UserCredential } from 'firebase/auth';
 import { firebaseAuth, firebaseDb, firebaseStorage } from '@/lib/firebase';
 import type { Agency, AgencyStatus } from '@/lib/types';
 import { slugify } from '@/lib/util';
+import { safeSetDoc, safeUpdateDoc } from '@/lib/firestore-safe';
 
 export async function signupAgency(input: {
   name: string;
@@ -31,8 +32,12 @@ export async function signupAgency(input: {
 
   let logoUrl: string | undefined;
   if (input.logoFile) {
-    const r = ref(storage, `agencies/${uid}/logo.${(input.logoFile.name.split('.').pop() || 'png').toLowerCase()}`);
-    await uploadBytes(r, input.logoFile, { contentType: input.logoFile.type });
+    const ext = (input.logoFile.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]+/g, '') || 'png';
+    const r = ref(storage, `agencies/${uid}/logo.${ext}`);
+    const ct = input.logoFile.type && input.logoFile.type !== 'application/octet-stream'
+      ? input.logoFile.type
+      : 'image/png';
+    await uploadBytes(r, input.logoFile, { contentType: ct });
     logoUrl = await getDownloadURL(r);
   }
 
@@ -56,12 +61,12 @@ export async function signupAgency(input: {
     createdAt: Date.now(),
   };
 
-  await setDoc(doc(db, 'agencies', uid), {
-    ...agency,
-    createdAt: serverTimestamp(),
-  });
+  await safeSetDoc(
+    doc(db, 'agencies', uid),
+    { ...agency, createdAt: serverTimestamp() } as Record<string, unknown>,
+  );
 
-  await setDoc(doc(db, 'agencies_by_slug', slug), { agencyId: uid });
+  await safeSetDoc(doc(db, 'agencies_by_slug', slug), { agencyId: uid });
 
   return agency;
 }
@@ -83,7 +88,8 @@ export async function loginAgency(email: string, password: string) {
 
 export async function getAgency(id: string): Promise<Agency | null> {
   const snap = await getDoc(doc(firebaseDb(), 'agencies', id));
-  return snap.exists() ? ({ id: snap.id, ...(snap.data() as Omit<Agency, 'id'>) }) : null;
+  // id LAST so doc-id always overrides any stale `id` field in the data body.
+  return snap.exists() ? ({ ...(snap.data() as Omit<Agency, 'id'>), id: snap.id }) : null;
 }
 
 export async function getAgencyBySlug(slug: string): Promise<Agency | null> {
@@ -98,23 +104,23 @@ export async function listPendingAgencies(): Promise<Agency[]> {
   const db = firebaseDb();
   const q = query(collection(db, 'agencies'), where('status', '==', 'pending' as AgencyStatus), orderBy('createdAt', 'desc'), limit(100));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Agency, 'id'>) }));
+  return snap.docs.map((d) => ({ ...(d.data() as Omit<Agency, 'id'>), id: d.id }));
 }
 
 export async function listActiveAgencies(): Promise<Agency[]> {
   const db = firebaseDb();
   const q = query(collection(db, 'agencies'), where('status', '==', 'active' as AgencyStatus), orderBy('createdAt', 'desc'), limit(200));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Agency, 'id'>) }));
+  return snap.docs.map((d) => ({ ...(d.data() as Omit<Agency, 'id'>), id: d.id }));
 }
 
 export async function setAgencyStatus(id: string, status: AgencyStatus) {
   const db = firebaseDb();
   const update: Record<string, unknown> = { status };
   if (status === 'active') update.approvedAt = Date.now();
-  await updateDoc(doc(db, 'agencies', id), update);
+  await safeUpdateDoc(doc(db, 'agencies', id), update);
 }
 
 export async function updateAgency(id: string, patch: Partial<Agency>) {
-  await updateDoc(doc(firebaseDb(), 'agencies', id), patch as Record<string, unknown>);
+  await safeUpdateDoc(doc(firebaseDb(), 'agencies', id), patch as Record<string, unknown>);
 }

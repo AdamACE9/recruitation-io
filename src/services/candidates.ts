@@ -3,11 +3,12 @@
 // ============================================================
 
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, serverTimestamp, setDoc, updateDoc, getDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { firebaseAuth, firebaseDb, firebaseFunctions, firebaseStorage } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import type { Candidate } from '@/lib/types';
+import { safeSetDoc, safeUpdateDoc, stripUndefined } from '@/lib/firestore-safe';
 
 export async function signupCandidate(input: {
   email: string; password: string;
@@ -24,8 +25,20 @@ export async function signupCandidate(input: {
 
   const upload = async (f: File | null | undefined, name: string) => {
     if (!f) return undefined;
-    const r = ref(storage, `candidates/${uid}/${name}-${Date.now()}-${f.name}`);
-    await uploadBytes(r, f, { contentType: f.type });
+    // Strip path-unfriendly chars from the filename (parens, spaces, etc.) so the
+    // Storage path is canonical and download URLs don't have to URL-encode oddly.
+    const safeName = f.name.replace(/[^a-zA-Z0-9._-]+/g, '_');
+    const r = ref(storage, `candidates/${uid}/${name}-${Date.now()}-${safeName}`);
+    // Force a sensible contentType when the browser leaves it blank or sets a
+    // generic value (Firefox / Edge sometimes report '' for PDFs whose names
+    // include spaces or parens — that breaks contentType-checking storage rules).
+    const inferred =
+      f.type && f.type !== 'application/octet-stream'
+        ? f.type
+        : name === 'photo'
+        ? 'image/jpeg'
+        : 'application/pdf';
+    await uploadBytes(r, f, { contentType: inferred });
     return getDownloadURL(r);
   };
 
@@ -40,13 +53,22 @@ export async function signupCandidate(input: {
     name: input.name,
     email: input.email,
     phone: input.phone,
-    cvUrl, linkedinUrl, photoUrl,
+    // Only attach URL fields when an upload actually happened — Firestore
+    // rejects `undefined` and we don't want to write `null`s either.
+    ...(cvUrl ? { cvUrl } : {}),
+    ...(linkedinUrl ? { linkedinUrl } : {}),
+    ...(photoUrl ? { photoUrl } : {}),
     skills: input.skills ?? [],
     preferredLanguage: input.preferredLanguage,
     createdAt: Date.now(),
   };
 
-  await setDoc(doc(db, 'candidates', uid), { ...candidate, createdAt: serverTimestamp() });
+  // Use the safe wrapper so any stray undefined never reaches Firestore — this is
+  // the single most common cause of "Function setDoc() called with invalid data".
+  await safeSetDoc(
+    doc(db, 'candidates', uid),
+    stripUndefined({ ...candidate, createdAt: serverTimestamp() }) as Record<string, unknown>,
+  );
 
   // Trigger async PDF extraction (non-blocking best-effort)
   if (cvUrl || linkedinUrl) {
@@ -67,5 +89,5 @@ export async function getCandidate(uid: string): Promise<Candidate | null> {
 }
 
 export async function updateCandidate(uid: string, patch: Partial<Candidate>) {
-  await updateDoc(doc(firebaseDb(), 'candidates', uid), patch as Record<string, unknown>);
+  await safeUpdateDoc(doc(firebaseDb(), 'candidates', uid), patch as Record<string, unknown>);
 }

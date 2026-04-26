@@ -3,8 +3,8 @@
 // ============================================================
 
 import {
-  addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy,
-  query, serverTimestamp, setDoc, updateDoc, where, limit as qlim,
+  collection, deleteDoc, doc, getDoc, getDocs, orderBy,
+  query, serverTimestamp, where, limit as qlim,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { firebaseDb, firebaseFunctions, firebaseStorage } from '@/lib/firebase';
@@ -14,6 +14,7 @@ import { httpsCallable } from 'firebase/functions';
 import { slugify, randomId } from '@/lib/util';
 import { makeShortCode } from '@/lib/features';
 import { recordCredit } from './credits';
+import { safeAddDoc, safeSetDoc, safeUpdateDoc } from '@/lib/firestore-safe';
 
 export async function createJob(input: {
   agencyId: string;
@@ -35,14 +36,22 @@ export async function createJob(input: {
   let handbookFileName: string | undefined;
   if (input.handbookFile) {
     const id = randomId(8);
-    const r = ref(storage, `jobs/${slug}/handbook/${id}-${input.handbookFile.name}`);
-    await uploadBytes(r, input.handbookFile, { contentType: input.handbookFile.type });
+    const safeFileName = input.handbookFile.name.replace(/[^a-zA-Z0-9._-]+/g, '_');
+    const r = ref(storage, `jobs/${slug}/handbook/${id}-${safeFileName}`);
+    const ct = input.handbookFile.type && input.handbookFile.type !== 'application/octet-stream'
+      ? input.handbookFile.type
+      : 'application/pdf';
+    await uploadBytes(r, input.handbookFile, { contentType: ct });
     handbookUrl = await getDownloadURL(r);
     handbookFileName = input.handbookFile.name;
   }
 
-  const job: Job = {
-    id: '',
+  // Build the persisted shape WITHOUT an `id` field. Storing `id: ''` and then
+  // doing `{ id: d.id, ...d.data() }` on reads caused the data spread to
+  // OVERWRITE the doc id with empty string, which then propagated through to
+  // application.jobId and broke prepareInterview with "documentPath must be a
+  // non-empty string". The doc id is only known to Firestore — never store it.
+  const jobData: Omit<Job, 'id'> = {
     agencyId: input.agencyId,
     title: input.title,
     slug,
@@ -57,8 +66,8 @@ export async function createJob(input: {
     ...(handbookUrl ? { handbookUrl, handbookFileName } : {}),
   };
 
-  const docRef = await addDoc(collection(db, 'jobs'), { ...job, createdAt: serverTimestamp() });
-  const created = { ...job, id: docRef.id };
+  const docRef = await safeAddDoc(collection(db, 'jobs'), { ...jobData, createdAt: serverTimestamp() });
+  const created: Job = { ...jobData, id: docRef.id };
   // deduct credits
   await recordCredit(input.agencyId, -CREDIT_COSTS.jobCreate, 'job_create', input.actorUid, `Created job ${input.title}`);
 
@@ -66,23 +75,30 @@ export async function createJob(input: {
 }
 
 export async function updateJob(id: string, patch: Partial<Job>) {
-  await updateDoc(doc(firebaseDb(), 'jobs', id), patch as Record<string, unknown>);
+  await safeUpdateDoc(doc(firebaseDb(), 'jobs', id), patch as Record<string, unknown>);
 }
 
 export async function setJobStatus(id: string, status: JobStatus) {
   await updateJob(id, { status });
 }
 
+// IMPORTANT: in all of the following readers, `id: snap.id` is spread LAST so it
+// always overrides any `id` field present in the stored document body. Older
+// `createJob` versions persisted `id: ''`; without this defensive ordering,
+// every read would zero-out the doc id and corrupt downstream lookups (e.g.
+// applications written with `jobId: ''` then prepareInterview throwing
+// "documentPath must be a non-empty string").
+
 export async function getJob(id: string): Promise<Job | null> {
   const snap = await getDoc(doc(firebaseDb(), 'jobs', id));
-  return snap.exists() ? ({ id: snap.id, ...(snap.data() as Omit<Job, 'id'>) }) : null;
+  return snap.exists() ? ({ ...(snap.data() as Omit<Job, 'id'>), id: snap.id }) : null;
 }
 
 export async function listJobsByAgency(agencyId: string): Promise<Job[]> {
   const db = firebaseDb();
   const q = query(collection(db, 'jobs'), where('agencyId', '==', agencyId), orderBy('createdAt', 'desc'), qlim(100));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Job, 'id'>) }));
+  return snap.docs.map((d) => ({ ...(d.data() as Omit<Job, 'id'>), id: d.id }));
 }
 
 export async function listActiveJobsByAgency(agencyId: string): Promise<Job[]> {
@@ -94,7 +110,26 @@ export async function listPublicJobs(): Promise<Job[]> {
   const db = firebaseDb();
   const q = query(collection(db, 'jobs'), where('status', '==', 'active' as JobStatus), orderBy('createdAt', 'desc'), qlim(50));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Job, 'id'>) }));
+  return snap.docs.map((d) => ({ ...(d.data() as Omit<Job, 'id'>), id: d.id }));
+}
+
+/** Resolve an agencyId + slug pair to a single active job. Used by the public candidate portal.
+ *  Uses only a slug equality filter (no orderBy) to avoid requiring a composite index. */
+export async function getActiveJobBySlug(agencyId: string, slug: string): Promise<Job | null> {
+  const db = firebaseDb();
+  // Filter by slug only — single equality filter needs no composite index.
+  // Verify agencyId + status in code to prevent cross-agency slug collisions.
+  const q = query(
+    collection(db, 'jobs'),
+    where('slug', '==', slug),
+    qlim(5),
+  );
+  const snap = await getDocs(q);
+  // Spread data first so `id: d.id` always wins over any stale `id` in the doc body.
+  const match = snap.docs
+    .map((d) => ({ ...(d.data() as Omit<Job, 'id'>), id: d.id }))
+    .find((j) => j.agencyId === agencyId && j.status === 'active');
+  return match ?? null;
 }
 
 /** Resolve a short share-code to its full job. Used by /s/:code redirect. */
@@ -104,7 +139,7 @@ export async function getJobByShortCode(code: string): Promise<Job | null> {
   const snap = await getDocs(q);
   if (snap.empty) return null;
   const d = snap.docs[0];
-  return { id: d.id, ...(d.data() as Omit<Job, 'id'>) };
+  return { ...(d.data() as Omit<Job, 'id'>), id: d.id };
 }
 
 // ---- Test questions (sub-collection) ----
@@ -115,12 +150,16 @@ export async function addTestQuestion(jobId: string, q: Omit<TestQuestion, 'id'>
   const id = randomId(8);
   let imageUrl: string | undefined;
   if (imageFile) {
-    const r = ref(storage, `jobs/${jobId}/tests/${id}-${imageFile.name}`);
-    await uploadBytes(r, imageFile, { contentType: imageFile.type });
+    const safeFileName = imageFile.name.replace(/[^a-zA-Z0-9._-]+/g, '_');
+    const r = ref(storage, `jobs/${jobId}/tests/${id}-${safeFileName}`);
+    const ct = imageFile.type && imageFile.type !== 'application/octet-stream'
+      ? imageFile.type
+      : 'image/jpeg';
+    await uploadBytes(r, imageFile, { contentType: ct });
     imageUrl = await getDownloadURL(r);
   }
   const full: TestQuestion = { ...q, id, imageUrl: imageUrl ?? q.imageUrl ?? null };
-  await setDoc(doc(db, 'jobs', jobId, 'testQuestions', id), full);
+  await safeSetDoc(doc(db, 'jobs', jobId, 'testQuestions', id), full as unknown as Record<string, unknown>);
   return full;
 }
 

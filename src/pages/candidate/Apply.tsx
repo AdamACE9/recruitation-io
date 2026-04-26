@@ -15,15 +15,17 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { firebaseStorage } from '@/lib/firebase';
 import { getAgencyBySlug } from '@/services/agencies';
-import { listActiveJobsByAgency } from '@/services/jobs';
+import { getActiveJobBySlug } from '@/services/jobs';
 import {
   createApplication,
   prepareInterview,
   listenApplication,
+  findExistingApplication,
 } from '@/services/applications';
 import { updateCandidate } from '@/services/candidates';
 import { useAuth } from '@/contexts/AuthContext';
 import { applyBrand } from '@/lib/theme';
+import { safeNextPath } from '@/lib/util';
 import type { Agency, Application, InterviewPrepStatus, Job } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -68,8 +70,10 @@ export default function Apply() {
       if (!a) return;
       setAgency(a);
       applyBrand(a.brandColor);
-      const jobs = await listActiveJobsByAgency(a.id);
-      setJob(jobs.find((j) => j.slug === jobSlug) ?? null);
+      if (jobSlug) {
+        const j = await getActiveJobBySlug(a.id, jobSlug);
+        setJob(j);
+      }
     });
   }, [agencySlug, jobSlug]);
 
@@ -99,7 +103,10 @@ export default function Apply() {
   async function startInterview() {
     if (!job) return;
     if (!user || role !== 'candidate' || !candidate) {
-      nav(`/signup/candidate?next=${encodeURIComponent(location.pathname)}`);
+      // safeNextPath is applied on the receiving end (CandidateAuth) — but we
+      // also pre-validate here so a malicious agency slug containing weird chars
+      // can't smuggle a bogus path through the signup redirect.
+      nav(`/signup/candidate?next=${encodeURIComponent(safeNextPath(location.pathname, '/me'))}`);
       return;
     }
     setLoading(true);
@@ -109,8 +116,12 @@ export default function Apply() {
       if (photoFile && candidate.uid) {
         try {
           const storage = firebaseStorage();
-          const r = storageRef(storage, `candidates/${candidate.uid}/photo-${Date.now()}-${photoFile.name}`);
-          await uploadBytes(r, photoFile, { contentType: photoFile.type });
+          const safeName = photoFile.name.replace(/[^a-zA-Z0-9._-]+/g, '_');
+          const r = storageRef(storage, `candidates/${candidate.uid}/photo-${Date.now()}-${safeName}`);
+          const ct = photoFile.type && photoFile.type !== 'application/octet-stream'
+            ? photoFile.type
+            : 'image/jpeg';
+          await uploadBytes(r, photoFile, { contentType: ct });
           photoUrl = await getDownloadURL(r);
           await updateCandidate(candidate.uid, { photoUrl });
         } catch (photoErr) {
@@ -118,7 +129,10 @@ export default function Apply() {
         }
       }
 
-      const app = await createApplication({
+      // Check for existing application — duplicates would re-charge the agency
+      // and potentially expose them to abuse. If one already exists, resume it.
+      const existing = await findExistingApplication(candidate.uid, job.id);
+      const app = existing ?? await createApplication({
         agencyId: job.agencyId,
         jobId: job.id,
         jobTitle: job.title,
@@ -129,7 +143,13 @@ export default function Apply() {
         candidatePhotoUrl: photoUrl,
       });
       setAppId(app.id);
-      setPrep({ status: 'pending', questions: [], updatedAt: Date.now() });
+      // Reuse existing prep state if present, else seed pending.
+      setPrep(existing?.interviewPrep ?? { status: 'pending', questions: [], updatedAt: Date.now() });
+      // If existing prep is already ready, don't re-fire prepareInterview.
+      if (existing?.interviewPrep?.status === 'ready') {
+        setLoading(false);
+        return;
+      }
       // Fire-and-forget; status streams back via the listener above.
       // If the Cloud Function call itself errors before touching Firestore,
       // set local state to 'failed' so the UI doesn't stay stuck in "preparing".
@@ -169,7 +189,7 @@ export default function Apply() {
           {candidate ? (
             <Link to="/me" className="btn btn-secondary btn-sm">My applications</Link>
           ) : (
-            <Link to={`/login/candidate?next=${encodeURIComponent(location.pathname)}`} className="btn btn-ghost btn-sm">
+            <Link to={`/login/candidate?next=${encodeURIComponent(safeNextPath(location.pathname, '/me'))}`} className="btn btn-ghost btn-sm">
               Sign in
             </Link>
           )}

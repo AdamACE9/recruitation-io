@@ -38,6 +38,7 @@ import ShortlinkRedirect from '@/pages/ShortlinkRedirect';
 import Portal from '@/pages/candidate/Portal';
 import BrowseJobs from '@/pages/candidate/BrowseJobs';
 import Apply from '@/pages/candidate/Apply';
+import AgencyHome from '@/pages/candidate/AgencyHome';
 import Interview from '@/pages/candidate/Interview';
 import ThankYou from '@/pages/candidate/ThankYou';
 import Verify from '@/pages/candidate/Verify';
@@ -70,6 +71,7 @@ export default function App() {
           <Route path="/s/:code" element={<ShortlinkRedirect />} />
 
           {/* ——— Candidate public apply (branded) ——— */}
+          <Route path="/:agencySlug" element={<AgencyHome />} />
           <Route path="/:agencySlug/:jobSlug" element={<Apply />} />
           <Route path="/jobs-open" element={<BrowseJobs />} />
 

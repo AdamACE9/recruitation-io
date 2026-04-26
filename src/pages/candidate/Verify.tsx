@@ -15,6 +15,9 @@ interface Institution {
   name: string;
   confirmed: boolean | null;   // null = not answered, true = confirmed, false = wrong
   correction: string;
+  url?: string;
+  displayLink?: string;
+  description?: string;
 }
 
 export default function Verify() {
@@ -47,7 +50,29 @@ export default function Verify() {
         );
         const res = await call({ applicationId: id });
         const names = res.data.institutions ?? [];
-        setInstitutions(names.map((name) => ({ name, confirmed: null, correction: '' })));
+        // Show the names immediately, then enrich each one with URL + description
+        // from Google Custom Search in parallel so the candidate has visual context.
+        const initialList: Institution[] = names.map((name) => ({ name, confirmed: null, correction: '' }));
+        setInstitutions(initialList);
+
+        const search = httpsCallable<
+          { name: string },
+          { url?: string; description?: string; displayLink?: string; title?: string }
+        >(firebaseFunctions(), 'searchInstitution');
+        const enriched = await Promise.all(initialList.map(async (inst) => {
+          try {
+            const sr = await search({ name: inst.name });
+            return {
+              ...inst,
+              url: sr.data?.url ?? '',
+              displayLink: sr.data?.displayLink ?? '',
+              description: sr.data?.description ?? '',
+            };
+          } catch {
+            return inst;
+          }
+        }));
+        setInstitutions(enriched);
       } catch (e) {
         console.warn('[Verify] extraction failed:', e instanceof Error ? e.message : e);
         // On error, still proceed (skip verifications)
@@ -137,6 +162,23 @@ export default function Verify() {
       {!loading && institutions.map((inst, i) => (
         <div key={i} className="card" style={{ marginBottom: 12 }}>
           <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>{inst.name}</div>
+
+          {inst.url && (
+            <a
+              href={inst.url}
+              target="_blank"
+              rel="noreferrer"
+              className="link"
+              style={{ display: 'inline-block', fontSize: 12, marginBottom: 6, fontFamily: 'var(--font-mono)' }}
+            >
+              {inst.displayLink || inst.url}
+            </a>
+          )}
+          {inst.description && (
+            <p className="muted small" style={{ margin: '0 0 12px', lineHeight: 1.5 }}>
+              {inst.description}
+            </p>
+          )}
 
           {inst.confirmed === true ? (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--brand-50)', color: 'var(--brand)', borderRadius: 999, padding: '4px 12px', fontSize: 13, fontWeight: 600 }}>

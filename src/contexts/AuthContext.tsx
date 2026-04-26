@@ -7,7 +7,7 @@ import { onAuthStateChanged, signOut, type User as FbUser } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore';
 import { safeAuth, safeDb } from '@/lib/firebase';
 import type { Agency, Candidate, UserRole } from '@/lib/types';
-import { applyBrand } from '@/lib/theme';
+import { applyBrand, resetBrand } from '@/lib/theme';
 
 interface AuthState {
   loading: boolean;
@@ -98,6 +98,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut: async () => {
       const auth = safeAuth();
       if (auth) await signOut(auth);
+      // Reset brand CSS so the next page load doesn't inherit the previous
+      // agency's colors when the user navigates to a different portal.
+      try { resetBrand(); } catch { /* SSR / non-DOM contexts */ }
     },
   }), [state]);
 

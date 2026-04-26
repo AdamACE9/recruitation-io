@@ -3,13 +3,14 @@
 // ============================================================
 
 import {
-  addDoc, collection, doc, getDoc, getDocs, onSnapshot, orderBy, query,
-  serverTimestamp, updateDoc, where, limit as qlim,
+  collection, doc, getDoc, getDocs, onSnapshot, orderBy, query,
+  serverTimestamp, where, limit as qlim,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { firebaseDb, firebaseFunctions } from '@/lib/firebase';
 import type { Application, ApplicationStatus } from '@/lib/types';
 import { recordCredit } from './credits';
+import { safeAddDoc, safeUpdateDoc } from '@/lib/firestore-safe';
 
 export async function createApplication(input: {
   agencyId: string;
@@ -33,7 +34,7 @@ export async function createApplication(input: {
       updatedAt: Date.now(),
     },
   };
-  const ref = await addDoc(collection(db, 'applications'), payload);
+  const ref = await safeAddDoc(collection(db, 'applications'), payload);
   return { id: ref.id, ...input, status: 'applied', createdAt: Date.now() };
 }
 
@@ -46,16 +47,38 @@ export async function prepareInterview(applicationId: string): Promise<void> {
 
 export async function getApplication(id: string): Promise<Application | null> {
   const snap = await getDoc(doc(firebaseDb(), 'applications', id));
-  return snap.exists() ? ({ id: snap.id, ...(snap.data() as Omit<Application, 'id'>) }) : null;
+  // Spread data first so `id: snap.id` overrides any stale `id` in body.
+  return snap.exists() ? ({ ...(snap.data() as Omit<Application, 'id'>), id: snap.id }) : null;
 }
 
 export async function updateApplication(id: string, patch: Partial<Application>) {
-  await updateDoc(doc(firebaseDb(), 'applications', id), patch as Record<string, unknown>);
+  await safeUpdateDoc(doc(firebaseDb(), 'applications', id), patch as Record<string, unknown>);
+}
+
+/**
+ * Returns an existing application for this candidate+job pair if any, else null.
+ * Used to prevent duplicate applications which would charge the agency multiple times.
+ */
+export async function findExistingApplication(
+  candidateUid: string,
+  jobId: string,
+): Promise<Application | null> {
+  const db = firebaseDb();
+  const q = query(
+    collection(db, 'applications'),
+    where('candidateUid', '==', candidateUid),
+    where('jobId', '==', jobId),
+    qlim(1),
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { ...(d.data() as Omit<Application, 'id'>), id: d.id };
 }
 
 export function listenApplication(id: string, cb: (a: Application | null) => void): () => void {
   return onSnapshot(doc(firebaseDb(), 'applications', id), (snap) => {
-    cb(snap.exists() ? ({ id: snap.id, ...(snap.data() as Omit<Application, 'id'>) }) : null);
+    cb(snap.exists() ? ({ ...(snap.data() as Omit<Application, 'id'>), id: snap.id }) : null);
   });
 }
 
@@ -63,21 +86,21 @@ export async function listApplicationsByCandidate(uid: string): Promise<Applicat
   const db = firebaseDb();
   const q = query(collection(db, 'applications'), where('candidateUid', '==', uid), orderBy('createdAt', 'desc'), qlim(100));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Application, 'id'>) }));
+  return snap.docs.map((d) => ({ ...(d.data() as Omit<Application, 'id'>), id: d.id }));
 }
 
 export async function listApplicationsByJob(jobId: string): Promise<Application[]> {
   const db = firebaseDb();
   const q = query(collection(db, 'applications'), where('jobId', '==', jobId), orderBy('createdAt', 'desc'), qlim(500));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Application, 'id'>) }));
+  return snap.docs.map((d) => ({ ...(d.data() as Omit<Application, 'id'>), id: d.id }));
 }
 
 export async function listApplicationsByAgency(agencyId: string, lim = 200): Promise<Application[]> {
   const db = firebaseDb();
   const q = query(collection(db, 'applications'), where('agencyId', '==', agencyId), orderBy('createdAt', 'desc'), qlim(lim));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Application, 'id'>) }));
+  return snap.docs.map((d) => ({ ...(d.data() as Omit<Application, 'id'>), id: d.id }));
 }
 
 /**

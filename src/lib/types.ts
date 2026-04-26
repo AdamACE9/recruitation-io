@@ -57,6 +57,8 @@ export interface TestQuestion {
 export interface TailoredQuestion {
   id: string;
   question: string;
+  /** 2-4 keyword summary used for image search & UI matching (e.g. "ECG arrhythmia") */
+  topic?: string;
   /** Where the image came from, for audit & debugging. */
   imageSource: 'agency-upload' | 'google-cse' | 'none';
   imageUrl?: string;

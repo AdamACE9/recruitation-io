@@ -38,8 +38,12 @@ export default function Profile() {
   async function uploadDoc(kind: 'cvUrl' | 'linkedinUrl' | 'photoUrl', file: File) {
     if (!candidate) return;
     const storage = firebaseStorage();
-    const r = ref(storage, `candidates/${candidate.uid}/${kind}-${Date.now()}-${file.name}`);
-    await uploadBytes(r, file, { contentType: file.type });
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '_');
+    const r = ref(storage, `candidates/${candidate.uid}/${kind}-${Date.now()}-${safeName}`);
+    const ct = file.type && file.type !== 'application/octet-stream'
+      ? file.type
+      : kind === 'photoUrl' ? 'image/jpeg' : 'application/pdf';
+    await uploadBytes(r, file, { contentType: ct });
     const url = await getDownloadURL(r);
     await updateCandidate(candidate.uid, { [kind]: url } as never);
     toast(`${kind.replace('Url', '')} uploaded`, 'success');

@@ -1,5 +1,5 @@
 // ============================================================
-// Recruitation.AI — Landing v4  (competition edition)
+// Recruitation.AI — Landing v5
 // ============================================================
 import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
@@ -46,22 +46,6 @@ const SCORES = [
   { l:'Role Fit',        v:96 },
 ];
 
-const LIVE_FEED_SEED = [
-  { name:'Priya Sharma',    role:'Senior SWE',     score:92, rec:'HIRE',   t:'just now', live:false },
-  { name:'James Okoye',     role:'Product Manager', score:78, rec:'REVIEW', t:'1m ago',  live:false },
-  { name:'Sarah Chen',      role:'Data Scientist',  score:94, rec:'HIRE',   t:'3m ago',  live:false },
-  { name:'Ahmed Al-Hassan', role:'DevOps Lead',     score:0,  rec:'',       t:'9:12',    live:true  },
-  { name:'María González',  role:'UX Designer',     score:88, rec:'HIRE',   t:'6m ago',  live:false },
-  { name:'Luca Bianchi',    role:'ML Engineer',     score:81, rec:'HIRE',   t:'9m ago',  live:false },
-];
-
-const NEW_INTERVIEWS = [
-  { name:'Fatima Al-Zahra', role:'Frontend Dev',    score:89, rec:'HIRE',   t:'just now', live:false },
-  { name:'Carlos Rivera',   role:'Backend Eng',     score:73, rec:'REVIEW', t:'just now', live:false },
-  { name:'Yuki Tanaka',     role:'Data Analyst',    score:91, rec:'HIRE',   t:'just now', live:false },
-  { name:'Amara Nwosu',     role:'Cloud Architect', score:95, rec:'HIRE',   t:'just now', live:false },
-  { name:'Bjorn Eriksson',  role:'CTO Search',      score:87, rec:'HIRE',   t:'just now', live:false },
-];
 
 const PIPE_STEPS = [
   { icon:'📄', t:'CV Parsed',        detail:'Sarah Chen · Stanford MS · 6y ML at Google' },
@@ -71,14 +55,27 @@ const PIPE_STEPS = [
   { icon:'📊', t:'Shortlisted',      detail:'Signal Score 94 · Recommendation: HIRE' },
 ];
 
+const SPOTLIGHT_FEAT = [
+  {
+    icon:'🧠', t:'Tailored Questions Per CV',
+    d:'Gemini reads the actual CV. AI writes 3–5 questions specific to that exact candidate — their gaps, their career jumps, their claimed skills. No generic scripts, ever.',
+    stat:'2.3 sec', statL:'per CV tailored',
+    detail:['Probes specific role transitions', 'Flags unverified claims automatically', 'Questions adapt mid-interview'],
+  },
+  {
+    icon:'🎙️', t:'Real Voice Conversations',
+    d:"ElevenLabs AI runs the full interview with a natural, unhurried voice. It probes red flags, digs into technical depth, asks follow-up questions — and candidates can't tell it's AI.",
+    stat:'14 min', statL:'avg interview length',
+    detail:['Natural follow-up questions', 'Red-flag probing built in', 'Deepfake detection live'],
+  },
+];
+
 const CORE_FEAT = [
-  { icon:'🧠', t:'Tailored Questions Per CV',    d:'Gemini reads the actual CV. Groq writes 3–5 questions specific to that candidate. No generic scripts ever.' },
-  { icon:'🎙️', t:'Real Voice Conversations',    d:'ElevenLabs AI runs the full interview — probing red flags, testing technical depth, staying natural.' },
-  { icon:'🏛️', t:'Institution Verification',    d:'Every university and employer the candidate mentions is verified server-side after the call. No bluffing through.' },
+  { icon:'🏛️', t:'Institution Verification',    d:'Every university and employer is verified server-side after the call. No bluffing through.' },
   { icon:'🕵️', t:'Anti-Deepfake Detection',     d:'Synthetic voice markers analysed in real time. Caught deepfakes flagged red before they reach your desk.' },
-  { icon:'📊', t:'Ranked Shortlist Dashboard',   d:'Every candidate ranked by Signal Score™. Full audio, transcript, and AI commentary. Hire with confidence.' },
+  { icon:'📊', t:'Ranked Shortlist Dashboard',   d:'Every candidate ranked by Signal Score™. Full audio, transcript, and AI commentary.' },
   { icon:'🌍', t:'27 Languages Natively',        d:"Interview in the candidate's own language. Your team gets English transcripts. Zero translation fees." },
-  { icon:'🏷️', t:'White-Label Branded Portals', d:'Your logo, your brand colour, your domain. Candidates apply to your portal — not a generic third-party page.' },
+  { icon:'🏷️', t:'White-Label Branded Portals', d:'Your logo, brand colour, your domain. Candidates apply to your portal — not a generic third-party page.' },
   { icon:'⚔️', t:'Side-by-Side Comparison',     d:'Pick any 2–3 candidates and get an AI head-to-head matrix. Settle shortlist debates in 30 seconds.' },
   { icon:'💰', t:'Salary Intelligence',          d:"AI estimates fair market comp from verified experience. Never lose a candidate to a salary mismatch again." },
   { icon:'🔁', t:'Full Interview Replay',        d:'AI chapter markers jump to technical questions, red-flag moments, or culture fit signals instantly.' },
@@ -99,6 +96,7 @@ const TEMPLATES = [
 ];
 
 const TYPEWORDS = ['automated.', 'faster.', 'smarter.', 'cheaper.'];
+
 
 /* ─── Hooks ─────────────────────────────────────────────────── */
 function useDark(): boolean {
@@ -281,29 +279,48 @@ function TypeWord() {
 }
 
 /* ─── Live activity feed ─────────────────────────────────────── */
+type FeedItem = { name: string; role: string; live: boolean; t?: string; rec?: 'HIRE' | 'PASS' };
+const LIVE_FEED_SEED: FeedItem[] = [
+  { name: 'Aisha K.',  role: 'Senior Software Engineer', live: true,  t: '04:21' },
+  { name: 'Daniel M.', role: 'Frontend Engineer',         live: false, rec: 'HIRE' },
+  { name: 'Priya S.',  role: 'Data Analyst',              live: false, rec: 'HIRE' },
+  { name: 'Omar R.',   role: 'DevOps Engineer',           live: true,  t: '02:08' },
+  { name: 'Lina T.',   role: 'Product Designer',          live: false, rec: 'PASS' },
+  { name: 'Yusuf A.',  role: 'Backend Engineer',          live: false, rec: 'HIRE' },
+  { name: 'Maya B.',   role: 'QA Lead',                   live: true,  t: '06:42' },
+  { name: 'Hasan I.',  role: 'iOS Engineer',              live: false, rec: 'HIRE' },
+];
+const NEW_INTERVIEWS: FeedItem[] = [
+  { name: 'Sara N.',   role: 'Mobile Developer',          live: true,  t: '00:12' },
+  { name: 'Karan P.',  role: 'Full-Stack Engineer',       live: false, rec: 'HIRE' },
+  { name: 'Fatima Z.', role: 'ML Engineer',               live: true,  t: '00:45' },
+  { name: 'Noah G.',   role: 'Site Reliability Engineer', live: false, rec: 'PASS' },
+  { name: 'Imran K.',  role: 'Security Engineer',         live: false, rec: 'HIRE' },
+  { name: 'Tanya V.',  role: 'Technical Writer',          live: true,  t: '01:33' },
+];
+
 function LiveFeed({ T }: { T: TH }) {
-  const [feed, setFeed] = useState(LIVE_FEED_SEED);
+  const [feed, setFeed] = useState<FeedItem[]>(LIVE_FEED_SEED);
   const newIdx = useRef(0);
   useEffect(() => {
     const iv = setInterval(() => {
       const next = NEW_INTERVIEWS[newIdx.current % NEW_INTERVIEWS.length];
       newIdx.current++;
-      setFeed(f => [next, ...f.slice(0,7)]);
+      setFeed((f: FeedItem[]) => [next, ...f.slice(0, 7)]);
     }, 3200);
     return () => clearInterval(iv);
   }, []);
   return (
-    <div style={{borderTop:`1px solid ${T.ft}`,borderBottom:`1px solid ${T.ft}`,padding:'16px 32px',overflow:'hidden',position:'relative'}}>
-      {/* fade edges */}
+    <div style={{borderTop:`1px solid ${T.ft}`,borderBottom:`1px solid ${T.ft}`,padding:'14px 0',overflow:'hidden',position:'relative'}}>
       <div style={{position:'absolute',left:0,top:0,bottom:0,width:80,background:`linear-gradient(90deg,${T.bg},transparent)`,zIndex:2,pointerEvents:'none'}}/>
       <div style={{position:'absolute',right:0,top:0,bottom:0,width:80,background:`linear-gradient(270deg,${T.bg},transparent)`,zIndex:2,pointerEvents:'none'}}/>
-      <div style={{display:'flex',gap:10,overflowX:'hidden',flexWrap:'nowrap'}}>
-        {feed.map((item, i) => (
+      <div style={{padding:'0 32px',display:'flex',gap:10,overflowX:'hidden',flexWrap:'nowrap'}}>
+        {feed.map((item: FeedItem, i: number) => (
           <div key={`${item.name}-${i}`} style={{
             display:'inline-flex',alignItems:'center',gap:10,flexShrink:0,
             background: item.live ? 'rgba(26,122,60,0.10)' : T.card,
             border:`1px solid ${item.live ? 'rgba(26,122,60,0.4)' : T.border}`,
-            borderRadius:10,padding:'9px 14px',
+            borderRadius:10,padding:'8px 14px',
             animation: i === 0 ? 'feedSlide 0.4s ease' : 'none',
           }}>
             {item.live ? (
@@ -354,8 +371,7 @@ function TheMath({ T, dark }: { T: TH; dark: boolean }) {
           </h2>
           <p style={{color:T.tm,fontSize:16,marginTop:14,maxWidth:540,marginInline:'auto'}}>Same 20 candidates. Same quality bar. Radically different time and cost.</p>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',gap:0,alignItems:'stretch'}}>
-          {/* Old way */}
+        <div className="math-g" style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',gap:0,alignItems:'stretch'}}>
           <div data-sr data-sr-delay="0.05" style={{background: dark?'rgba(239,68,68,0.04)':'rgba(239,68,68,0.03)',border:`1px solid rgba(239,68,68,0.15)`,borderRadius:'20px 0 0 20px',padding:'32px 28px'}}>
             <div style={{fontWeight:700,fontSize:12,color:'#ef4444',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:24}}>🐢 The Old Way</div>
             {OLD.map(r=>(
@@ -378,11 +394,9 @@ function TheMath({ T, dark }: { T: TH; dark: boolean }) {
               </div>
             </div>
           </div>
-          {/* VS divider */}
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',width:64,background:dark?T.bg2:T.bg,zIndex:1}}>
             <span style={{fontWeight:900,fontSize:18,color:T.td,background:T.card,border:`1px solid ${T.border}`,borderRadius:'50%',width:44,height:44,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>VS</span>
           </div>
-          {/* New way */}
           <div data-sr data-sr-delay="0.1" style={{background:'rgba(26,122,60,0.06)',border:`1px solid rgba(26,122,60,0.25)`,borderRadius:'0 20px 20px 0',padding:'32px 28px',boxShadow:'0 0 48px rgba(26,122,60,0.08)'}}>
             <div style={{fontWeight:700,fontSize:12,color:'#39d98a',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:24}}>⚡ Recruitation</div>
             {NEW.map(r=>(
@@ -478,9 +492,18 @@ function Pipeline({ T, dark }: { T: TH; dark: boolean }) {
 function StatCard({ n, suffix='', label, T }: { n:number; suffix?:string; label:string; T:TH }) {
   const { val, ref } = useCounter(n);
   return (
-    <div ref={ref} className="land-card" style={{padding:'32px 24px',textAlign:'center',background:T.card,border:`1px solid ${T.border}`}}>
-      <div style={{fontFamily:'var(--font-display,system-ui)',fontSize:44,fontWeight:900,letterSpacing:'-0.04em',background:'linear-gradient(135deg,#39d98a,#1a7a3c)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',lineHeight:1}}>{val}{suffix}</div>
-      <div style={{fontSize:13,color:T.td,marginTop:8,lineHeight:1.5}}>{label}</div>
+    <div ref={ref} style={{
+      padding:'32px 24px',textAlign:'center',
+      background:T.card,border:`1px solid ${T.border}`,
+      borderRadius:20, position:'relative', overflow:'hidden',
+      transition:'border-color 0.28s,box-shadow 0.28s,transform 0.22s',
+    }}
+    onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.transform='translateY(-4px)';(e.currentTarget as HTMLElement).style.borderColor='rgba(26,122,60,0.50)';(e.currentTarget as HTMLElement).style.boxShadow='0 0 40px rgba(26,122,60,0.16)';}}
+    onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.transform='';(e.currentTarget as HTMLElement).style.borderColor=T.border;(e.currentTarget as HTMLElement).style.boxShadow='';}}
+    >
+      <div style={{position:'absolute',inset:0,background:'radial-gradient(ellipse at 50% 0%,rgba(26,122,60,0.08) 0%,transparent 70%)',pointerEvents:'none'}}/>
+      <div style={{fontFamily:'var(--font-display,system-ui)',fontSize:52,fontWeight:900,letterSpacing:'-0.04em',background:'linear-gradient(135deg,#39d98a,#1a7a3c)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',lineHeight:1}}>{val}{suffix}</div>
+      <div style={{fontSize:13,color:T.td,marginTop:10,lineHeight:1.5}}>{label}</div>
     </div>
   );
 }
@@ -508,6 +531,7 @@ function Orbs({ dark }: { dark:boolean }) {
   );
 }
 
+
 /* ─── Main ───────────────────────────────────────────────────── */
 export default function Landing() {
   const dark = useDark();
@@ -528,8 +552,9 @@ export default function Landing() {
         @keyframes blink     {50%{opacity:0;}}
         @keyframes orbFloat  {from{transform:translateY(0) scale(1);}to{transform:translateY(-50px) scale(1.06);}}
         @keyframes feedSlide {from{opacity:0;transform:translateX(-20px);}to{opacity:1;transform:none;}}
-        @keyframes marquee   {from{transform:translateX(0);}to{transform:translateX(-50%);}}
+        @keyframes marquee   {from{transform:translateX(0);}to{transform:translateX(-50%);}  }
         @keyframes shimmer   {0%{background-position:0% 50%;}100%{background-position:200% 50%;}}
+        @keyframes heroFloat {0%,100%{transform:translateY(0);}50%{transform:translateY(-8px);}}
 
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 
@@ -543,10 +568,9 @@ export default function Landing() {
 
         .land-chip{display:inline-flex;align-items:center;gap:7px;border-radius:9999px;padding:5px 16px;font-size:11px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#39d98a;}
 
-        /* dot grid bg */
         .dot-grid{background-image:radial-gradient(circle,rgba(26,122,60,0.18) 1px,transparent 1px);background-size:28px 28px;}
 
-        .land-card{border-radius:16px;transition:border-color 0.28s,box-shadow 0.28s,transform 0.22s;}
+        .land-card{border-radius:20px;transition:border-color 0.28s,box-shadow 0.28s,transform 0.22s;}
         .land-card:hover{border-color:rgba(26,122,60,0.50)!important;box-shadow:0 0 36px rgba(26,122,60,0.16)!important;transform:translateY(-4px);}
 
         .land-btn-p{display:inline-flex;align-items:center;gap:8px;background:#1a7a3c;color:#fff;border:none;border-radius:9999px;padding:14px 28px;font-size:15px;font-weight:700;cursor:pointer;text-decoration:none;transition:background 0.2s,box-shadow 0.2s,transform 0.15s;box-shadow:0 0 24px rgba(26,122,60,0.45);}
@@ -559,10 +583,10 @@ export default function Landing() {
         .land-nl{font-size:12px;letter-spacing:0.1em;text-transform:uppercase;text-decoration:none;transition:color 0.2s;}
         .land-nl:hover{color:#39d98a!important;}
 
-        .feat-card{border-radius:16px;padding:28px 24px;display:flex;flex-direction:column;gap:12px;transition:border-color 0.28s,box-shadow 0.28s,transform 0.22s;}
+        .feat-card{border-radius:18px;padding:28px 24px;display:flex;flex-direction:column;gap:12px;transition:border-color 0.28s,box-shadow 0.28s,transform 0.22s;}
         .feat-card:hover{border-color:rgba(26,122,60,0.50)!important;box-shadow:0 0 36px rgba(26,122,60,0.14)!important;transform:translateY(-4px);}
 
-        .tmpl-card{border-radius:16px;padding:26px;transition:border-color 0.25s,box-shadow 0.25s,transform 0.25s;}
+        .tmpl-card{border-radius:18px;padding:26px;transition:border-color 0.25s,box-shadow 0.25s,transform 0.25s;}
         .tmpl-card:hover{border-color:rgba(26,122,60,0.55)!important;box-shadow:0 8px 40px rgba(26,122,60,0.15)!important;transform:translateY(-5px);}
 
         @media(max-width:1000px){
@@ -573,6 +597,7 @@ export default function Landing() {
           .g4{grid-template-columns:1fr 1fr!important;}
           .g5{grid-template-columns:1fr 1fr!important;}
           .math-g{grid-template-columns:1fr!important;}
+          .spot-g{grid-template-columns:1fr!important;}
         }
         @media(max-width:600px){
           .g4{grid-template-columns:1fr!important;}
@@ -601,50 +626,183 @@ export default function Landing() {
         </nav>
 
         {/* ── HERO ──────────────────────────────────────────── */}
-        <section style={{padding:'110px 32px 80px',position:'relative',overflow:'hidden'}}>
-          {dark && <div className="dot-grid" style={{position:'absolute',inset:0,opacity:0.6,pointerEvents:'none'}}/>}
+        <section style={{padding:'120px 32px 100px',position:'relative',overflow:'hidden',minHeight:'88vh',display:'flex',alignItems:'center'}}>
+          {/* Background layers */}
+          {dark && <div className="dot-grid" style={{position:'absolute',inset:0,opacity:0.5,pointerEvents:'none'}}/>}
           <Orbs dark={dark}/>
-          <div style={{maxWidth:1280,margin:'0 auto',position:'relative',zIndex:1}}>
-            <div className="hero-g" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:72,alignItems:'center'}}>
+          {/* Dramatic top-center spotlight */}
+          <div style={{position:'absolute',top:0,left:'50%',transform:'translateX(-50%)',width:900,height:500,background:'radial-gradient(ellipse at 50% 0%,rgba(26,122,60,0.22) 0%,transparent 70%)',pointerEvents:'none',zIndex:0}}/>
+          {/* Thin top-border beam */}
+          <div style={{position:'absolute',top:0,left:0,right:0,height:1,background:'linear-gradient(90deg,transparent 0%,rgba(57,217,138,0.5) 30%,rgba(57,217,138,0.8) 50%,rgba(57,217,138,0.5) 70%,transparent 100%)',zIndex:1}}/>
 
-              {/* Copy */}
-              <div style={{display:'flex',flexDirection:'column',gap:28}}>
-                <div data-sr style={{display:'flex',flexWrap:'wrap',gap:10}}>
-                  <span className="land-chip" style={{background:T.chip,border:`1px solid ${T.chipB}`}}>
-                    <span style={{width:7,height:7,borderRadius:'50%',background:'#39d98a',display:'inline-block',animation:'pulseDot 1.5s ease-in-out infinite'}}/>
-                    Live in 27 languages
-                  </span>
-                  <span style={{display:'inline-flex',alignItems:'center',gap:7,background:T.tag,border:`1px solid ${T.tagB}`,borderRadius:9999,padding:'5px 14px',fontSize:11,color:T.tagT}}>
-                    <span style={{color:'#ef4444'}}>🛡️</span>
-                    <span style={{color:'#39d98a',fontWeight:700}}>Anti-deepfake</span> detection built in
-                  </span>
+          <div style={{maxWidth:1280,margin:'0 auto',position:'relative',zIndex:1,width:'100%'}}>
+            <div className="hero-g" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:80,alignItems:'center'}}>
+
+              {/* ── Copy column ── */}
+              <div style={{display:'flex',flexDirection:'column',gap:0}}>
+
+                {/* Live status badge */}
+                <div data-sr style={{marginBottom:28}}>
+                  <div style={{
+                    display:'inline-flex',alignItems:'center',gap:10,
+                    padding:'7px 16px 7px 10px',
+                    background:'rgba(57,217,138,0.06)',
+                    border:'1px solid rgba(57,217,138,0.22)',
+                    borderRadius:9999,
+                  }}>
+                    <div style={{display:'flex',alignItems:'center',gap:6,background:'rgba(34,197,94,0.12)',border:'1px solid rgba(34,197,94,0.3)',borderRadius:999,padding:'3px 10px'}}>
+                      <span style={{width:6,height:6,borderRadius:'50%',background:'#22c55e',display:'inline-block',boxShadow:'0 0 8px #22c55e',animation:'pulseDot 1.5s ease-in-out infinite'}}/>
+                      <span style={{fontSize:10,fontWeight:800,color:'#22c55e',letterSpacing:'0.08em'}}>LIVE</span>
+                    </div>
+                    <span style={{fontSize:12,color:T.tm}}>142 agencies screening candidates right now</span>
+                  </div>
                 </div>
 
-                <h1 data-sr data-sr-delay="0.08" style={{fontFamily:'var(--font-display,system-ui)',fontWeight:900,lineHeight:1.04,letterSpacing:'-0.045em',fontSize:'clamp(3rem,5.8vw,4.6rem)',color:T.t}}>
-                  Screen 500<br/>candidates<br/><TypeWord/>
-                </h1>
+                {/* Headline */}
+                <div data-sr data-sr-delay="0.06" style={{marginBottom:28}}>
+                  {/* Pre-line */}
+                  <div style={{
+                    fontFamily:'var(--font-display,system-ui)',fontWeight:700,
+                    fontSize:'clamp(1rem,1.4vw,1.25rem)',
+                    color:T.td,letterSpacing:'0.01em',marginBottom:6,
+                  }}>
+                    Every applicant. Every role.
+                  </div>
+                  {/* Main line 1 - giant outlined number */}
+                  <h1 style={{
+                    fontFamily:'var(--font-display,system-ui)',fontWeight:900,
+                    letterSpacing:'-0.05em',lineHeight:0.95,margin:0,
+                    fontSize:'clamp(4.5rem,8vw,7.2rem)',
+                  }}>
+                    <span style={{color:T.t,display:'block'}}>Screen</span>
+                    <span style={{display:'block',
+                      WebkitTextStroke:`3px #39d98a`,
+                      color:'transparent',
+                      textShadow:`0 0 80px rgba(57,217,138,0.25)`,
+                      lineHeight:1,
+                    }}>500.</span>
+                    <span style={{display:'block',
+                      fontSize:'clamp(2.4rem,4.2vw,3.8rem)',
+                      color:T.t,letterSpacing:'-0.03em',lineHeight:1.1,marginTop:4,
+                    }}>Hire the best <TypeWord/></span>
+                  </h1>
+                </div>
 
-                <p data-sr data-sr-delay="0.16" style={{fontSize:18,color:T.tm,lineHeight:1.7,maxWidth:500}}>
-                  Recruitation.io runs real AI voice interviews with every applicant —
-                  probes red flags, tests technical depth, verifies credentials, and
-                  delivers a <strong style={{color:T.t}}>ranked shortlist in under 2 minutes.</strong>
+                {/* Body */}
+                <p data-sr data-sr-delay="0.14" style={{
+                  fontSize:17,color:T.tm,lineHeight:1.75,maxWidth:480,marginBottom:28,
+                }}>
+                  Real AI voice interviews for every applicant — tailored questions,
+                  red-flag probing, credential verification, and a{' '}
+                  <strong style={{color:T.t,fontWeight:600}}>ranked shortlist in under 2 minutes.</strong>
                 </p>
 
-                <div data-sr data-sr-delay="0.22" style={{display:'flex',flexWrap:'wrap',gap:12}}>
-                  <Link to="/signup/agency" className="land-btn-p lg">Start free — 20 credits →</Link>
-                  <a href="#live" className="land-btn-g" style={{border:`1px solid ${T.ghost}`,color:T.ghostT}}>Watch it run ↓</a>
+                {/* Micro-metrics strip */}
+                <div data-sr data-sr-delay="0.18" style={{
+                  display:'flex',flexWrap:'wrap',gap:0,marginBottom:32,
+                  background:T.card,border:`1px solid ${T.border}`,
+                  borderRadius:12,overflow:'hidden',width:'fit-content',
+                }}>
+                  {[
+                    {n:'95%',  l:'faster than phone screens'},
+                    {n:'27',   l:'languages supported'},
+                    {n:'2 min',l:'to full ranked shortlist'},
+                  ].map((m,i)=>(
+                    <div key={m.n} style={{
+                      padding:'12px 20px',display:'flex',flexDirection:'column',
+                      borderRight: i < 2 ? `1px solid ${T.border}` : 'none',
+                    }}>
+                      <span style={{fontFamily:'var(--font-display,system-ui)',fontSize:18,fontWeight:800,color:'#39d98a',letterSpacing:'-0.02em',lineHeight:1}}>{m.n}</span>
+                      <span style={{fontSize:11,color:T.td,marginTop:3,whiteSpace:'nowrap'}}>{m.l}</span>
+                    </div>
+                  ))}
                 </div>
 
-                <div data-sr data-sr-delay="0.28" style={{display:'flex',flexWrap:'wrap',gap:8}}>
-                  {['SOC 2 ready','GDPR aligned','Voice-clone detection','White-label portals','No credit card'].map(tag=>(
-                    <span key={tag} style={{fontSize:11,color:T.td,background:T.tag,border:`1px solid ${T.tagB}`,borderRadius:6,padding:'3px 10px'}}>{tag}</span>
+                {/* CTAs */}
+                <div data-sr data-sr-delay="0.22" style={{display:'flex',flexWrap:'wrap',gap:12,marginBottom:24,alignItems:'center'}}>
+                  {/* Primary CTA with glow ring */}
+                  <div style={{position:'relative',display:'inline-flex'}}>
+                    <div style={{
+                      position:'absolute',inset:-3,borderRadius:9999,
+                      background:'linear-gradient(135deg,#39d98a,#1a7a3c,#39d98a)',
+                      backgroundSize:'200% 200%',
+                      animation:'shimmer 2.5s linear infinite',
+                      opacity:0.6,filter:'blur(6px)',
+                    }}/>
+                    <Link to="/signup/agency" className="land-btn-p lg" style={{position:'relative'}}>
+                      Start free — 20 credits →
+                    </Link>
+                  </div>
+                  <a href="#live" className="land-btn-g" style={{border:`1px solid ${T.ghost}`,color:T.ghostT}}>
+                    Watch it run ↓
+                  </a>
+                </div>
+
+                {/* Trust tags */}
+                <div data-sr data-sr-delay="0.26" style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:32}}>
+                  {['SOC 2 ready','GDPR aligned','Anti-deepfake','White-label portals','No credit card'].map(tag=>(
+                    <span key={tag} style={{
+                      fontSize:11,color:T.td,
+                      background:T.tag,border:`1px solid ${T.tagB}`,
+                      borderRadius:6,padding:'3px 10px',
+                    }}>{tag}</span>
                   ))}
+                </div>
+
+                {/* Completion notification card */}
+                <div data-sr data-sr-delay="0.30" style={{
+                  display:'inline-flex',alignItems:'center',gap:14,
+                  padding:'12px 18px',
+                  background:T.card,
+                  border:`1px solid rgba(26,122,60,0.35)`,
+                  borderRadius:14,width:'fit-content',
+                  animation:'heroFloat 6s ease-in-out infinite',
+                  boxShadow:dark?'0 8px 32px rgba(0,0,0,0.3)':'0 8px 24px rgba(0,0,0,0.08)',
+                }}>
+                  <div style={{
+                    width:36,height:36,borderRadius:10,
+                    background:'rgba(26,122,60,0.12)',border:'1px solid rgba(26,122,60,0.25)',
+                    display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0,
+                  }}>📊</div>
+                  <div>
+                    <div style={{fontSize:12,fontWeight:700,color:T.t,marginBottom:2}}>Interview complete · Signal Score 94</div>
+                    <div style={{fontSize:11,color:T.td}}>Sarah Chen · Data Scientist · <span style={{color:'#39d98a',fontWeight:700}}>HIRE</span></div>
+                  </div>
+                  <div style={{
+                    padding:'3px 10px',borderRadius:999,
+                    background:'rgba(26,122,60,0.12)',border:'1px solid rgba(26,122,60,0.3)',
+                    fontSize:10,fontWeight:800,color:'#39d98a',letterSpacing:'0.05em',flexShrink:0,
+                  }}>+1 done</div>
                 </div>
               </div>
 
-              {/* Widget */}
-              <div className="wid-hide" style={{display:'flex',justifyContent:'center',paddingBottom:44}}>
+              {/* ── Widget column ── */}
+              <div className="wid-hide" style={{display:'flex',flexDirection:'column',alignItems:'center',gap:16,paddingBottom:44}}>
                 <HeroWidget/>
+                {/* Second floating card - positioned below widget */}
+                <div style={{
+                  display:'inline-flex',alignItems:'center',gap:12,
+                  padding:'10px 16px',
+                  background:T.card,border:`1px solid ${T.border}`,
+                  borderRadius:12,alignSelf:'flex-end',
+                  animation:'heroFloat 7s ease-in-out 1s infinite',
+                }}>
+                  <div style={{display:'flex',gap:0}}>
+                    {['#1a7a3c','#1a56a0','#7c3aed','#c2410c'].map((c,i)=>(
+                      <div key={c} style={{
+                        width:22,height:22,borderRadius:'50%',background:c,
+                        border:`2px solid ${T.bg}`,marginLeft:i?-6:0,
+                        display:'flex',alignItems:'center',justifyContent:'center',
+                        fontSize:8,color:'#fff',fontWeight:800,flexShrink:0,
+                      }}>
+                        {['YA','CH','RK','AM'][i]}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{fontSize:11,color:T.tm}}>
+                    <span style={{fontWeight:700,color:T.t}}>4 agencies</span> reviewed this candidate
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -657,9 +815,9 @@ export default function Landing() {
         <section style={{padding:'80px 32px'}}>
           <div style={{maxWidth:1280,margin:'0 auto'}}>
             <div className="g4" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:16}}>
-              <StatCard n={500}  suffix="+"  label="Candidates screened per agency per month" T={T}/>
-              <StatCard n={27}   suffix=""   label="Languages — interview in any of them" T={T}/>
-              <StatCard n={95}   suffix="%"  label="Faster than a manual phone-screen process" T={T}/>
+              <StatCard n={500}  suffix="+"   label="Candidates screened per agency per month" T={T}/>
+              <StatCard n={27}   suffix=""    label="Languages — interview in any of them" T={T}/>
+              <StatCard n={95}   suffix="%"   label="Faster than a manual phone-screen process" T={T}/>
               <StatCard n={2}    suffix=" min" label="From interview end to full ranked shortlist" T={T}/>
             </div>
           </div>
@@ -672,7 +830,7 @@ export default function Landing() {
         <Pipeline T={T} dark={dark}/>
 
         {/* ── FEATURES ──────────────────────────────────────── */}
-        <section id="features" style={{padding:'100px 32px'}}>
+        <section id="features" style={{padding:'100px 32px',background:dark?`linear-gradient(180deg,${T.bg} 0%,${T.bg2} 50%,${T.bg} 100%)`:T.bg2}}>
           <div style={{maxWidth:1280,margin:'0 auto'}}>
             <div style={{textAlign:'center',marginBottom:56}} data-sr>
               <span className="land-chip" style={{background:T.chip,border:`1px solid ${T.chipB}`,marginBottom:16,display:'inline-flex'}}>Everything in the platform</span>
@@ -682,12 +840,47 @@ export default function Landing() {
               </h2>
               <p style={{color:T.tm,fontSize:16,marginTop:12,maxWidth:520,marginInline:'auto'}}>No add-ons, no hidden tiers. Every Growth plan includes the full stack.</p>
             </div>
-            <div className="g3" style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14}}>
+
+            {/* Spotlight features */}
+            <div className="spot-g" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
+              {SPOTLIGHT_FEAT.map((f,i)=>(
+                <div key={f.t} className="land-card" data-sr data-sr-delay={String(i*0.08)} style={{
+                  padding:'36px 32px',background:T.card,border:`1px solid ${T.border}`,
+                  position:'relative',overflow:'hidden',
+                }}>
+                  <div style={{position:'absolute',inset:0,background:'radial-gradient(600px 400px at 0% 0%,rgba(26,122,60,0.06) 0%,transparent 65%)',pointerEvents:'none'}}/>
+                  <div style={{position:'relative'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:20}}>
+                      <div style={{width:60,height:60,borderRadius:16,background:'rgba(26,122,60,0.10)',border:'1px solid rgba(26,122,60,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,flexShrink:0}}>{f.icon}</div>
+                      <div>
+                        <div style={{fontFamily:'var(--font-display,system-ui)',fontSize:18,fontWeight:700,color:T.t,letterSpacing:'-0.02em'}}>{f.t}</div>
+                        <div style={{display:'flex',alignItems:'baseline',gap:6,marginTop:4}}>
+                          <span style={{fontFamily:'monospace',fontSize:20,fontWeight:800,color:'#39d98a'}}>{f.stat}</span>
+                          <span style={{fontSize:11,color:T.td}}>{f.statL}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p style={{fontSize:14,color:T.tm,lineHeight:1.75,marginBottom:20}}>{f.d}</p>
+                    <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                      {f.detail.map(d=>(
+                        <div key={d} style={{display:'flex',alignItems:'center',gap:10}}>
+                          <span style={{color:'#39d98a',fontSize:13,fontWeight:700,flexShrink:0}}>✓</span>
+                          <span style={{fontSize:13,color:T.td}}>{d}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Compact feature grid */}
+            <div className="g4" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
               {CORE_FEAT.map((f,i)=>(
-                <div key={f.t} className="feat-card" data-sr data-sr-delay={String(i*0.05)} style={{background:T.card,border:`1px solid ${T.border}`}}>
-                  <div style={{width:48,height:48,borderRadius:12,background:'rgba(26,122,60,0.10)',border:'1px solid rgba(26,122,60,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22}}>{f.icon}</div>
-                  <div className="land-h3" style={{color:T.t}}>{f.t}</div>
-                  <div style={{fontSize:13,color:T.td,lineHeight:1.65}}>{f.d}</div>
+                <div key={f.t} className="feat-card" data-sr data-sr-delay={String(i*0.04)} style={{background:T.card,border:`1px solid ${T.border}`}}>
+                  <div style={{width:40,height:40,borderRadius:10,background:'rgba(26,122,60,0.10)',border:'1px solid rgba(26,122,60,0.20)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>{f.icon}</div>
+                  <div className="land-h3" style={{color:T.t,fontSize:13.5}}>{f.t}</div>
+                  <div style={{fontSize:12.5,color:T.td,lineHeight:1.65}}>{f.d}</div>
                 </div>
               ))}
             </div>
@@ -695,8 +888,8 @@ export default function Landing() {
         </section>
 
         {/* ── JOB TEMPLATES ─────────────────────────────────── */}
-        <section style={{padding:'0 32px 100px'}}>
-          <div style={{maxWidth:1280,margin:'0 auto'}}>
+        <section style={{padding:'0 32px 100px',background:dark?`linear-gradient(180deg,${T.bg} 0%,${T.bg2} 50%,${T.bg} 100%)`:T.bg2}}>
+          <div style={{maxWidth:1280,margin:'0 auto',paddingTop:100}}>
             <div style={{textAlign:'center',marginBottom:48}} data-sr>
               <span className="land-chip" style={{background:T.chip,border:`1px solid ${T.chipB}`,marginBottom:16,display:'inline-flex'}}>Ready-made templates</span>
               <h2 className="land-h2" style={{color:T.t,marginTop:12}}>
@@ -733,8 +926,8 @@ export default function Landing() {
         </section>
 
         {/* ── PRICING ───────────────────────────────────────── */}
-        <section id="pricing" style={{padding:'0 32px 100px',background:dark?`linear-gradient(180deg,${T.bg} 0%,${T.bg2} 50%,${T.bg} 100%)`:T.bg2}}>
-          <div style={{maxWidth:1280,margin:'0 auto',paddingTop:100}}>
+        <section id="pricing" style={{padding:'100px 32px'}}>
+          <div style={{maxWidth:1280,margin:'0 auto'}}>
             <div style={{textAlign:'center',marginBottom:56}} data-sr>
               <span className="land-chip" style={{background:T.chip,border:`1px solid ${T.chipB}`,marginBottom:16,display:'inline-flex'}}>Pricing</span>
               <h2 className="land-h2" style={{color:T.t,marginTop:12}}>
@@ -745,25 +938,52 @@ export default function Landing() {
             </div>
             <div className="g3" style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,alignItems:'start'}}>
               {PLANS.map((p,i)=>(
-                <div key={p.name} className="land-card" data-sr data-sr-delay={String(i*0.09)} style={{padding:'36px 30px',position:'relative',background:T.card,border:`1px solid ${p.hot?'rgba(26,122,60,0.55)':T.border}`,boxShadow:p.hot?'0 0 48px rgba(26,122,60,0.18)':'none'}}>
-                  {p.hot&&<div style={{position:'absolute',top:-13,left:'50%',transform:'translateX(-50%)',background:'linear-gradient(135deg,#1a7a3c,#39d98a)',color:'#fff',fontSize:10,fontWeight:800,letterSpacing:'0.1em',padding:'4px 16px',borderRadius:9999,whiteSpace:'nowrap'}}>MOST POPULAR</div>}
+                <div key={p.name} data-sr data-sr-delay={String(i*0.09)} style={{
+                  padding:'36px 30px',position:'relative',borderRadius:24,
+                  background:p.hot?(dark?'rgba(26,122,60,0.07)':'rgba(26,122,60,0.03)'):T.card,
+                  border:`1px solid ${p.hot?'rgba(26,122,60,0.55)':T.border}`,
+                  boxShadow:p.hot?'0 0 60px rgba(26,122,60,0.14), 0 0 0 1px rgba(26,122,60,0.1)':'none',
+                  transition:'transform 0.22s,box-shadow 0.28s',
+                }}
+                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.transform='translateY(-4px)';}}
+                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.transform='';}}
+                >
+                  {p.hot&&(
+                    <div style={{
+                      position:'absolute',top:-14,left:'50%',transform:'translateX(-50%)',
+                      background:'linear-gradient(135deg,#1a7a3c,#39d98a)',color:'#fff',
+                      fontSize:10,fontWeight:800,letterSpacing:'0.1em',
+                      padding:'5px 18px',borderRadius:9999,whiteSpace:'nowrap',
+                      boxShadow:'0 4px 16px rgba(26,122,60,0.4)',
+                    }}>⚡ MOST POPULAR</div>
+                  )}
+
                   <div style={{fontFamily:'monospace',fontSize:11,color:p.hot?'#39d98a':T.td,letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:12}}>{p.name}</div>
                   <div style={{fontFamily:'var(--font-display,system-ui)',fontWeight:900,fontSize:44,letterSpacing:'-0.04em',color:T.t,lineHeight:1}}>
                     {p.price}<span style={{fontSize:16,fontWeight:500,color:T.td}}>{p.period}</span>
                   </div>
-                  <div style={{fontSize:12,color:T.td,marginTop:6,marginBottom:22}}>{p.sub}</div>
-                  <hr style={{border:'none',borderTop:`1px solid ${T.border}`,marginBottom:22}}/>
-                  <div style={{display:'flex',flexDirection:'column',gap:11,marginBottom:26}}>
+                  <div style={{fontSize:12,color:T.td,marginTop:6,marginBottom:24}}>{p.sub}</div>
+
+                  <hr style={{border:'none',borderTop:`1px solid ${T.border}`,marginBottom:24}}/>
+
+                  <div style={{display:'flex',flexDirection:'column',gap:12,marginBottom:28}}>
                     {p.feat.map(f=>(
                       <div key={f} style={{display:'flex',alignItems:'flex-start',gap:10}}>
-                        <span style={{color:'#1a7a3c',fontSize:15,marginTop:1,fontWeight:700}}>✓</span>
+                        <div style={{
+                          width:18,height:18,borderRadius:'50%',flexShrink:0,marginTop:1,
+                          background:p.hot?'rgba(26,122,60,0.15)':'rgba(26,122,60,0.08)',
+                          border:`1px solid ${p.hot?'rgba(26,122,60,0.35)':'rgba(26,122,60,0.15)'}`,
+                          display:'flex',alignItems:'center',justifyContent:'center',
+                          fontSize:10,color:p.hot?'#39d98a':'#1a7a3c',fontWeight:700,
+                        }}>✓</div>
                         <span style={{fontSize:13,color:T.tm,lineHeight:1.4}}>{f}</span>
                       </div>
                     ))}
                   </div>
+
                   {p.name==='Enterprise'
                     ?<a href="mailto:sales@recruitation.io" className="land-btn-g" style={{display:'flex',justifyContent:'center',border:`1px solid ${T.ghost}`,color:T.ghostT}}>Talk to sales</a>
-                    :<Link to="/signup/agency" className="land-btn-p" style={{display:'flex',justifyContent:'center',...(p.hot?{}:{background:'rgba(26,122,60,0.12)',color:'#39d98a',boxShadow:'none'})}}>Start free</Link>
+                    :<Link to="/signup/agency" className="land-btn-p" style={{display:'flex',justifyContent:'center',...(p.hot?{}:{background:'rgba(26,122,60,0.12)',color:'#39d98a',boxShadow:'none'})}}>Start free →</Link>
                   }
                 </div>
               ))}
@@ -774,42 +994,94 @@ export default function Landing() {
         {/* ── CTA ───────────────────────────────────────────── */}
         <section style={{padding:'0 32px 120px'}}>
           <div style={{maxWidth:1280,margin:'0 auto'}}>
-            <div data-sr style={{position:'relative',borderRadius:28,overflow:'hidden',padding:'96px 48px',textAlign:'center',background:dark?'linear-gradient(135deg,rgba(26,122,60,0.18) 0%,rgba(57,217,138,0.06) 100%)':'linear-gradient(135deg,rgba(26,122,60,0.08) 0%,rgba(57,217,138,0.03) 100%)',border:`1px solid ${T.chipB}`}}>
+            <div data-sr style={{
+              position:'relative',borderRadius:32,overflow:'hidden',
+              padding:'100px 48px',textAlign:'center',
+              background:dark?'linear-gradient(135deg,rgba(26,122,60,0.18) 0%,rgba(57,217,138,0.06) 100%)':'linear-gradient(135deg,rgba(26,122,60,0.08) 0%,rgba(57,217,138,0.03) 100%)',
+              border:`1px solid ${T.chipB}`,
+            }}>
+              {/* Dot grid bg */}
               {dark&&<div style={{position:'absolute',inset:0,backgroundImage:'radial-gradient(circle,rgba(26,122,60,0.15) 1px,transparent 1px)',backgroundSize:'24px 24px',opacity:0.5,pointerEvents:'none'}}/>}
-              <div style={{position:'absolute',inset:0,background:'radial-gradient(ellipse at 50% 120%,rgba(26,122,60,0.25) 0%,transparent 60%)',pointerEvents:'none'}}/>
+              {/* Glow */}
+              <div style={{position:'absolute',inset:0,background:'radial-gradient(ellipse at 50% 120%,rgba(26,122,60,0.28) 0%,transparent 60%)',pointerEvents:'none'}}/>
+              {/* Corner orbs */}
+              <div style={{position:'absolute',top:-80,left:-80,width:300,height:300,borderRadius:'50%',background:'radial-gradient(ellipse,rgba(26,122,60,0.18),transparent 70%)',filter:'blur(40px)',pointerEvents:'none'}}/>
+              <div style={{position:'absolute',bottom:-80,right:-80,width:300,height:300,borderRadius:'50%',background:'radial-gradient(ellipse,rgba(57,217,138,0.12),transparent 70%)',filter:'blur(40px)',pointerEvents:'none'}}/>
+
               <div style={{position:'relative'}}>
-                <div style={{fontFamily:'monospace',fontSize:12,color:'#39d98a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:20}}>● {dark?'98 agencies screening right now':'Join the waitlist'}</div>
-                <h2 style={{fontFamily:'var(--font-display,system-ui)',fontWeight:900,fontSize:'clamp(2.2rem,4vw,3.6rem)',color:T.t,letterSpacing:'-0.04em',lineHeight:1.1}}>
+                <div style={{fontFamily:'monospace',fontSize:12,color:'#39d98a',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:20}}>
+                  <span style={{display:'inline-flex',alignItems:'center',gap:8}}>
+                    <span style={{width:8,height:8,borderRadius:'50%',background:'#22c55e',boxShadow:'0 0 8px #22c55e',display:'inline-block',animation:'pulseDot 1.5s ease-in-out infinite'}}/>
+                    {dark?'142 agencies screening right now':'Join the platform'}
+                  </span>
+                </div>
+                <h2 style={{fontFamily:'var(--font-display,system-ui)',fontWeight:900,fontSize:'clamp(2.2rem,4vw,3.8rem)',color:T.t,letterSpacing:'-0.04em',lineHeight:1.08,marginBottom:20}}>
                   Ready to screen 500 candidates<br/>
                   <span className="brand-grad">before your competitors screen 5?</span>
                 </h2>
-                <p style={{color:T.tm,fontSize:17,marginTop:18,maxWidth:500,marginInline:'auto',lineHeight:1.6}}>
+                <p style={{color:T.tm,fontSize:17,maxWidth:500,marginInline:'auto',lineHeight:1.65,marginBottom:36}}>
                   Start free. 20 credits. 4 jobs. No credit card. Your shortlist in under 2 minutes.
                 </p>
-                <div style={{display:'flex',justifyContent:'center',gap:14,marginTop:36,flexWrap:'wrap'}}>
+                <div style={{display:'flex',justifyContent:'center',gap:14,flexWrap:'wrap',marginBottom:20}}>
                   <Link to="/signup/agency" className="land-btn-p lg">Create your free account →</Link>
                   <a href="mailto:sales@recruitation.io" className="land-btn-g" style={{border:`1px solid ${T.ghost}`,color:T.ghostT,padding:'16px 28px',fontSize:15}}>Talk to sales</a>
                 </div>
-                <p style={{fontSize:12,color:T.td,marginTop:20}}>No credit card required · Approved within 24 hours · Cancel any time</p>
+                <p style={{fontSize:12,color:T.td}}>No credit card · Approved within 24 hours · Cancel any time</p>
               </div>
             </div>
           </div>
         </section>
 
         {/* ── FOOTER ────────────────────────────────────────── */}
-        <footer style={{borderTop:`1px solid ${T.ft}`,padding:'40px 32px'}}>
-          <div style={{maxWidth:1280,margin:'0 auto',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:16}}>
-            <span style={{fontWeight:900,fontSize:18,color:T.t,fontFamily:'var(--font-display,system-ui)',letterSpacing:'-0.02em'}}>
-              Recruitation<span className="brand-grad">.io</span>
-            </span>
-            <div style={{display:'flex',gap:24}}>
-              {[['Privacy','mailto:legal@recruitation.io'],['Terms','mailto:legal@recruitation.io'],['Contact','mailto:hello@recruitation.io'],['Sales','mailto:sales@recruitation.io']].map(([l,h])=>(
-                <a key={l} href={h} style={{fontSize:13,color:T.td,textDecoration:'none',transition:'color 0.2s'}}
-                  onMouseEnter={e=>(e.target as HTMLElement).style.color='#39d98a'}
-                  onMouseLeave={e=>(e.target as HTMLElement).style.color=T.td}>{l}</a>
-              ))}
+        <footer style={{borderTop:`1px solid ${T.ft}`,padding:'56px 32px 40px'}}>
+          <div style={{maxWidth:1280,margin:'0 auto'}}>
+            <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1fr',gap:40,marginBottom:48}}>
+              {/* Brand */}
+              <div>
+                <div style={{fontWeight:900,fontSize:20,color:T.t,fontFamily:'var(--font-display,system-ui)',letterSpacing:'-0.02em',marginBottom:12}}>
+                  Recruitation<span className="brand-grad">.io</span>
+                </div>
+                <p style={{fontSize:13,color:T.td,lineHeight:1.7,maxWidth:260}}>
+                  AI-powered voice interviews for recruitment agencies. Screen faster, hire smarter.
+                </p>
+                <div style={{display:'flex',gap:8,marginTop:16}}>
+                  {['SOC 2','GDPR','ISO 27001'].map(b=>(
+                    <span key={b} style={{fontSize:10,fontWeight:600,color:T.td,background:T.tag,border:`1px solid ${T.tagB}`,borderRadius:5,padding:'3px 8px'}}>{b}</span>
+                  ))}
+                </div>
+              </div>
+              {/* Product */}
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:T.td,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:16}}>Product</div>
+                {[['Features','#features'],['Pricing','#pricing'],['Templates','#'],['Watch it run','#live']].map(([l,h])=>(
+                  <a key={l} href={h} style={{display:'block',fontSize:13,color:T.tm,textDecoration:'none',marginBottom:10,transition:'color 0.2s'}}
+                    onMouseEnter={e=>(e.target as HTMLElement).style.color='#39d98a'}
+                    onMouseLeave={e=>(e.target as HTMLElement).style.color=T.tm}>{l}</a>
+                ))}
+              </div>
+              {/* Company */}
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:T.td,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:16}}>Company</div>
+                {[['About','mailto:hello@recruitation.io'],['Blog','mailto:hello@recruitation.io'],['Contact','mailto:hello@recruitation.io'],['Sales','mailto:sales@recruitation.io']].map(([l,h])=>(
+                  <a key={l} href={h} style={{display:'block',fontSize:13,color:T.tm,textDecoration:'none',marginBottom:10,transition:'color 0.2s'}}
+                    onMouseEnter={e=>(e.target as HTMLElement).style.color='#39d98a'}
+                    onMouseLeave={e=>(e.target as HTMLElement).style.color=T.tm}>{l}</a>
+                ))}
+              </div>
+              {/* Legal */}
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:T.td,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:16}}>Legal</div>
+                {[['Privacy Policy','mailto:legal@recruitation.io'],['Terms of Service','mailto:legal@recruitation.io'],['Cookie Policy','mailto:legal@recruitation.io'],['Security','mailto:legal@recruitation.io']].map(([l,h])=>(
+                  <a key={l} href={h} style={{display:'block',fontSize:13,color:T.tm,textDecoration:'none',marginBottom:10,transition:'color 0.2s'}}
+                    onMouseEnter={e=>(e.target as HTMLElement).style.color='#39d98a'}
+                    onMouseLeave={e=>(e.target as HTMLElement).style.color=T.tm}>{l}</a>
+                ))}
+              </div>
             </div>
-            <div style={{fontSize:12,color:T.ftT}}>© 2025 Recruitation.io · All rights reserved</div>
+            <div style={{borderTop:`1px solid ${T.ft}`,paddingTop:24,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:12}}>
+              <div style={{fontSize:12,color:T.ftT}}>© 2025 Recruitation.io · All rights reserved</div>
+              <div style={{fontSize:12,color:T.ftT}}>Built with AI · Powered by ElevenLabs, Gemini & Claude</div>
+            </div>
           </div>
         </footer>
 

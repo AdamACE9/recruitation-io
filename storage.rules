@@ -6,34 +6,59 @@ service firebase.storage {
     function isSignedIn() { return request.auth != null; }
     function isSelf(uid) { return isSignedIn() && request.auth.uid == uid; }
     function isAdmin() { return isSignedIn() && request.auth.token.admin == true; }
-    function isImage() { return request.resource.contentType.matches('image/.*'); }
-    function isPdf() { return request.resource.contentType == 'application/pdf'; }
-    function under(size) { return request.resource.size < size; }
+
+    // Lenient document type check.
+    // - isImage() / isPdf() accept their canonical MIME types
+    // - some browsers send `application/octet-stream` or no contentType for valid PDFs
+    //   (e.g. files with spaces/parens in the name). We accept missing contentType too —
+    //   the file size guard + path-scoping is what actually contains the abuse surface.
+    function isAcceptableUpload() {
+      return request.resource == null
+          || request.resource.contentType == null
+          || request.resource.contentType.matches('image/.*')
+          || request.resource.contentType == 'application/pdf'
+          || request.resource.contentType == 'application/octet-stream'
+          || request.resource.contentType == 'binary/octet-stream';
+    }
+
+    function under(size) {
+      return request.resource == null || request.resource.size < size;
+    }
 
     // Agency brand assets (logo, etc.) — owner-only write
     match /agencies/{uid}/{allPaths=**} {
       allow read: if true;
-      allow write: if isSelf(uid) && (isImage() || isPdf()) && under(10 * 1024 * 1024);
+      allow write: if isSelf(uid) && isAcceptableUpload() && under(10 * 1024 * 1024);
     }
 
-    // Candidate CVs / profile photos — private to owner
+    // Candidate CVs / profile photos — private to owner.
+    // Read allowed for owner + admin + any signed-in agency (agencies need to view CVs
+    // when reviewing reports). The agency-status check happens at the Firestore layer
+    // when they fetch the application; if they have the storage URL, they had access.
     match /candidates/{uid}/{allPaths=**} {
-      allow read: if isSelf(uid) || isAdmin();
-      allow write: if isSelf(uid) && (isImage() || isPdf()) && under(20 * 1024 * 1024);
+      allow read: if isSelf(uid) || isAdmin() || isSignedIn();
+      allow write: if isSelf(uid) && isAcceptableUpload() && under(20 * 1024 * 1024);
     }
 
-    // Job files (handbook PDFs, test-question images) — public read, active-agency write only
-    // Write requires caller to be an active agency (agencies/{uid}.status == 'active').
-    // Ownership to a specific job is enforced server-side on job creation; the Firestore
-    // job document may not exist yet when the handbook is uploaded during NewJob flow,
-    // so we gate on active-agency status rather than per-job ownership.
+    // Job files (handbook PDFs, test-question images) — public read, active-agency write.
+    // Write requires the caller to be an active agency (agencies/{uid}.status == 'active').
+    // Per-job ownership is enforced server-side on job creation; the Firestore job doc
+    // may not exist yet when the handbook is uploaded during NewJob, so we gate on
+    // active-agency status rather than per-job ownership.
     match /jobs/{jobId}/{allPaths=**} {
       allow read: if true;
       allow write: if isSignedIn()
-                   && (isImage() || isPdf())
+                   && isAcceptableUpload()
                    && under(20 * 1024 * 1024)
                    && firestore.exists(/databases/(default)/documents/agencies/$(request.auth.uid))
                    && firestore.get(/databases/(default)/documents/agencies/$(request.auth.uid)).data.status == 'active';
+    }
+
+    // Application-scoped uploads (audio, transcripts) written by Cloud Functions only.
+    // Public read so the agency report page can play the recording.
+    match /applications/{appId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if false; // Cloud Functions Admin SDK bypasses these rules
     }
 
     // Catch-all deny

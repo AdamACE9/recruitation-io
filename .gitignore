@@ -10,3 +10,7 @@ firebase-debug.log
 .idea
 functions/node_modules
 functions/lib
+tsconfig.tsbuildinfo
+.claude/
+test-step*.png
+test-write.mjs

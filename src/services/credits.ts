@@ -17,8 +17,13 @@ export async function recordCredit(
   // Atomic batch: ledger entry + balance update in one commit
   const batch = writeBatch(db);
   const txRef = doc(collection(db, 'creditTransactions'));
+  // Coalesce all optionals to null — Firestore client SDK rejects undefined.
   batch.set(txRef, {
-    agencyId, amount, type, actorUid, note: note ?? null,
+    agencyId,
+    amount,
+    type,
+    actorUid: actorUid ?? null,
+    note: note ?? null,
     createdAt: serverTimestamp(),
   });
   batch.update(doc(db, 'agencies', agencyId), { credits: increment(amount) });

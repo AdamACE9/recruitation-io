@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/Badge';
 import { useToast } from '@/lib/toast';
 import { createJob, addTestQuestion, extractJobFromPdf } from '@/services/jobs';
 import { listApplicationsByAgency } from '@/services/applications';
-import { readFileAsDataUrl, randomId } from '@/lib/util';
+import { readFileAsDataUrl, randomId, SUPPORTED_INTERVIEW_LANGUAGES } from '@/lib/util';
 import type { JobConfig, TestQuestion, RubricAxis, Application } from '@/lib/types';
 import { CREDIT_COSTS } from '@/lib/types';
 import { RubricBuilder } from '@/components/RubricBuilder';
@@ -163,7 +163,7 @@ export default function NewJob() {
               </Field>
               <Field label="Language">
                 <Select value={cfg.language} onChange={(e) => update('language', e.target.value)}>
-                  {['English', 'Arabic', 'Hindi', 'Urdu', 'Tagalog', 'French', 'Spanish'].map((l) => <option key={l}>{l}</option>)}
+                  {SUPPORTED_INTERVIEW_LANGUAGES.map((l) => <option key={l}>{l}</option>)}
                 </Select>
               </Field>
               <Field label="Duration (min)"><Input type="number" value={cfg.duration} onChange={(e) => update('duration', Number(e.target.value) || 0)} /></Field>

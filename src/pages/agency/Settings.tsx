@@ -27,13 +27,19 @@ export default function Settings() {
 
   async function uploadLogo(file: File) {
     if (!agency) return;
-    const storage = firebaseStorage();
-    const r = ref(storage, `agencies/${agency.id}/logo-${Date.now()}-${file.name}`);
-    await uploadBytes(r, file, { contentType: file.type });
-    const url = await getDownloadURL(r);
-    setLogoUrl(url);
-    await updateAgency(agency.id, { logoUrl: url });
-    toast('Logo updated', 'success');
+    try {
+      const storage = firebaseStorage();
+      const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '_');
+      const r = ref(storage, `agencies/${agency.id}/logo-${Date.now()}-${safeFileName}`);
+      const ct = file.type && file.type !== 'application/octet-stream' ? file.type : 'image/png';
+      await uploadBytes(r, file, { contentType: ct });
+      const url = await getDownloadURL(r);
+      setLogoUrl(url);
+      await updateAgency(agency.id, { logoUrl: url });
+      toast('Logo updated', 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Logo upload failed', 'danger');
+    }
   }
 
   async function save() {
