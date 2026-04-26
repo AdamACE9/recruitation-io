@@ -88,6 +88,21 @@ function requireAuth(auth: { uid?: string } | undefined): string {
   return auth.uid;
 }
 
+/**
+ * IDOR guard. Ensures the authenticated caller is one of the legitimate parties
+ * on the application — either the candidate who submitted it, or the agency
+ * that owns the job. Without this every Cloud Function that takes an
+ * `applicationId` is vulnerable to candidate-A poking Agency-B's data.
+ */
+function requireApplicationParty(
+  app: { candidateUid?: string; agencyId?: string },
+  callerUid: string,
+): void {
+  if (app.candidateUid !== callerUid && app.agencyId !== callerUid) {
+    throw new HttpsError('permission-denied', 'Not your application');
+  }
+}
+
 /** HTML-escape a value before splicing into an email body. Prevents
  *  injection attacks where a malicious agency or candidate name contains
  *  raw HTML/JavaScript and ends up in another party's inbox. */
@@ -107,9 +122,19 @@ export const extractJobFromPdf = onCall(
   { secrets: [GEMINI_KEY], timeoutSeconds: 120, region: 'us-central1' },
   async (req) => {
     requireAuth(req.auth);
-    const { pdfUrl } = z.object({ pdfUrl: z.string().url() }).parse(req.data);
-
-    const text = await pdfToText(pdfUrl);
+    // Client sends a base64 data-URL (`pdfDataUrl`), NOT a URL we should fetch.
+    // Earlier the schema accepted `pdfUrl: z.string().url()` which mismatched
+    // the client and broke the entire PDF-import flow at runtime; it ALSO
+    // would have been an SSRF surface (would fetch any URL incl. metadata
+    // service) if the client ever sent one. Decode inline; never fetch.
+    const { pdfDataUrl } = z
+      .object({ pdfDataUrl: z.string().regex(/^data:application\/pdf;base64,[A-Za-z0-9+/=]+$/, 'Expected base64 PDF data URL').max(20_000_000) })
+      .parse(req.data);
+    const base64 = pdfDataUrl.split(',', 2)[1];
+    if (!base64) throw new HttpsError('invalid-argument', 'Malformed data URL');
+    const bytes = Buffer.from(base64, 'base64');
+    const parsed = await pdfParse(bytes);
+    const text = (parsed.text || '').slice(0, 60_000);
     const gemini = new GoogleGenerativeAI(secret(GEMINI_KEY));
     const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const prompt = `Extract a structured job config from the following job description.
@@ -144,12 +169,18 @@ Respond with JSON only, no prose.`;
 export const extractCandidateDocs = onCall(
   { secrets: [GEMINI_KEY], timeoutSeconds: 120, region: 'us-central1' },
   async (req) => {
-    requireAuth(req.auth);
+    const callerUid = requireAuth(req.auth);
     const { uid, cvUrl, linkedinUrl } = z.object({
       uid: z.string(),
       cvUrl: z.string().url().optional(),
       linkedinUrl: z.string().url().optional(),
     }).parse(req.data);
+    // IDOR: only the candidate themselves may rewrite their own profile.
+    // Without this, any signed-in user could overwrite any other candidate's
+    // cvText/linkedinText/skills with attacker-supplied PDF content.
+    if (uid !== callerUid) {
+      throw new HttpsError('permission-denied', 'Not your profile');
+    }
 
     const gemini = new GoogleGenerativeAI(secret(GEMINI_KEY));
     const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
@@ -191,13 +222,14 @@ export const prepareInterview = onCall(
     region: 'us-central1',
   },
   async (req) => {
-    requireAuth(req.auth);
+    const callerUid = requireAuth(req.auth);
     const { applicationId } = z.object({ applicationId: z.string() }).parse(req.data);
 
     const appRef = db.collection('applications').doc(applicationId);
     const appSnap = await appRef.get();
     if (!appSnap.exists) throw new HttpsError('not-found', 'Application missing');
     const app = appSnap.data()!;
+    requireApplicationParty(app, callerUid);
 
     const now = () => Date.now();
     const setStage = (
@@ -512,13 +544,14 @@ Begin the interview now in ${language}.`;
 export const analyzeInterview = onCall(
   { secrets: [GEMINI_KEY, ANTHROPIC_KEY], timeoutSeconds: 300, region: 'us-central1' },
   async (req) => {
-    requireAuth(req.auth);
+    const callerUid = requireAuth(req.auth);
     const { applicationId } = z.object({ applicationId: z.string() }).parse(req.data);
 
     const appRef = db.collection('applications').doc(applicationId);
     const appSnap = await appRef.get();
     if (!appSnap.exists) throw new HttpsError('not-found', 'Application missing');
     const app = appSnap.data()!;
+    requireApplicationParty(app, callerUid);
 
     // Idempotency guard — prevent double credit deduction if called twice
     if (['under_review', 'approved', 'rejected'].includes(app.status)) {
@@ -605,9 +638,9 @@ Return strict JSON:
     const commScore = typeof scoreJson.scores?.communication === 'number' ? scoreJson.scores.communication : 50;
     const confScore = typeof scoreJson.scores?.confidence === 'number' ? scoreJson.scores.confidence : 50;
 
-    // Stage 3 — voice authenticity placeholder (0-100, higher = suspicious)
-    const voiceAuthenticity = 10 + Math.floor(Math.random() * 15);
-
+    // Voice authenticity is intentionally null until a real deepfake-detection
+    // model is wired in v0.2. Was a Math.random placeholder previously, which
+    // shipped a fake "fraud signal" to paying agencies — removed.
     const report = {
       overallScore,
       recommendation,
@@ -618,7 +651,7 @@ Return strict JSON:
       institutionVerifications: [],
       testResults: [],
       signalScore: Math.round((commScore + confScore) / 2),
-      voiceAuthenticity,
+      voiceAuthenticity: null as number | null,
       generatedAt: Date.now(),
     };
 
@@ -655,7 +688,7 @@ Return strict JSON:
 export const sendSelectionEmail = onCall(
   { secrets: [RESEND_KEY, APP_URL], region: 'us-central1' },
   async (req) => {
-    requireAuth(req.auth);
+    const callerUid = requireAuth(req.auth);
     const { applicationId } = z.object({
       applicationId: z.string(),
       actorUid: z.string().optional(),
@@ -665,6 +698,12 @@ export const sendSelectionEmail = onCall(
     const appSnap = await appRef.get();
     if (!appSnap.exists) throw new HttpsError('not-found', 'Application missing');
     const app = appSnap.data()!;
+    // Approval is an agency-only action. Stricter than requireApplicationParty
+    // because letting a candidate trigger their own approval (and credit drain)
+    // is not the intended flow.
+    if (app.agencyId !== callerUid) {
+      throw new HttpsError('permission-denied', 'Only the agency can approve');
+    }
 
     // Idempotency guard — prevent double-click from charging credits twice
     if (app.status === 'approved') throw new HttpsError('already-exists', 'Candidate already approved');
@@ -747,11 +786,17 @@ ${handbookBlock}
 export const fetchElevenLabsTranscript = onCall(
   { secrets: [ELEVENLABS_KEY], region: 'us-central1' },
   async (req) => {
-    requireAuth(req.auth);
+    const callerUid = requireAuth(req.auth);
     const { applicationId, conversationId } = z.object({
       applicationId: z.string(),
       conversationId: z.string().min(1),
     }).parse(req.data);
+
+    // IDOR: only the candidate or owning agency may patch this application's
+    // transcript / audio URL. Without this anyone could overwrite anyone's record.
+    const appSnap = await db.collection('applications').doc(applicationId).get();
+    if (!appSnap.exists) throw new HttpsError('not-found', 'Application missing');
+    requireApplicationParty(appSnap.data() as { candidateUid?: string; agencyId?: string }, callerUid);
 
     const res = await fetch(
       `https://api.elevenlabs.io/v1/convai/conversations/${encodeURIComponent(conversationId)}`,
@@ -786,11 +831,12 @@ export const fetchElevenLabsTranscript = onCall(
 export const extractInstitutions = onCall(
   { secrets: [GEMINI_KEY], region: 'us-central1' },
   async (req) => {
-    requireAuth(req.auth);
+    const callerUid = requireAuth(req.auth);
     const { applicationId } = z.object({ applicationId: z.string() }).parse(req.data);
 
     const appSnap = await db.collection('applications').doc(applicationId).get();
     if (!appSnap.exists) throw new HttpsError('not-found', 'Application missing');
+    requireApplicationParty(appSnap.data() as { candidateUid?: string; agencyId?: string }, callerUid);
     const transcript = (appSnap.data()?.transcriptOriginal ?? '') as string;
 
     if (!transcript.trim()) return { institutions: [] };

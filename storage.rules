@@ -13,12 +13,20 @@ service firebase.storage {
     //   (e.g. files with spaces/parens in the name). We accept missing contentType too —
     //   the file size guard + path-scoping is what actually contains the abuse surface.
     function isAcceptableUpload() {
-      return request.resource == null
-          || request.resource.contentType == null
-          || request.resource.contentType.matches('image/.*')
-          || request.resource.contentType == 'application/pdf'
-          || request.resource.contentType == 'application/octet-stream'
-          || request.resource.contentType == 'binary/octet-stream';
+      // contentType MUST be present and from an explicit allowlist. Earlier
+      // we accepted `null` here, which let an attacker upload arbitrary files
+      // (e.g. text/html, application/javascript) by omitting the Content-Type
+      // header — Firebase Storage would then serve them with that stored
+      // contentType from a *.firebasestorage.googleapis.com URL, creating a
+      // stored XSS vector under the platform's domain.
+      return request.resource != null
+          && request.resource.contentType != null
+          && (
+               request.resource.contentType.matches('image/.*')
+            || request.resource.contentType == 'application/pdf'
+            || request.resource.contentType == 'application/octet-stream'
+            || request.resource.contentType == 'binary/octet-stream'
+          );
     }
 
     function under(size) {

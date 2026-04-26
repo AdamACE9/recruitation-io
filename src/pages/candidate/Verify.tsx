@@ -44,12 +44,20 @@ export default function Verify() {
           return;
         }
 
-        const call = httpsCallable<{ applicationId: string }, { institutions: string[] }>(
-          firebaseFunctions(),
-          'extractInstitutions',
-        );
-        const res = await call({ applicationId: id });
-        const names = res.data.institutions ?? [];
+        // extractInstitutions can throw (network, permission, model error) —
+        // wrap it so a single failure doesn't trap the user on a forever spinner.
+        let names: string[] = [];
+        try {
+          const call = httpsCallable<{ applicationId: string }, { institutions: string[] }>(
+            firebaseFunctions(),
+            'extractInstitutions',
+          );
+          const res = await call({ applicationId: id });
+          names = res.data.institutions ?? [];
+        } catch (e) {
+          console.warn('[Verify] extractInstitutions failed; proceeding with empty list:', e instanceof Error ? e.message : e);
+          names = [];
+        }
         // Show the names immediately, then enrich each one with URL + description
         // from Google Custom Search in parallel so the candidate has visual context.
         const initialList: Institution[] = names.map((name) => ({ name, confirmed: null, correction: '' }));
@@ -76,8 +84,12 @@ export default function Verify() {
       } catch (e) {
         console.warn('[Verify] extraction failed:', e instanceof Error ? e.message : e);
         // On error, still proceed (skip verifications)
+      } finally {
+        // ALWAYS clear loading. If anything in the try threw before
+        // setLoading(false), the user would otherwise be stuck on the
+        // "Analysing..." spinner forever.
+        setLoading(false);
       }
-      setLoading(false);
     })();
   }, [id]);
 

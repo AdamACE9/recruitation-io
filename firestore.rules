@@ -83,13 +83,18 @@ service cloud.firestore {
     }
 
     // ------- credit ledger -------
+    // CRITICAL: ALL ledger writes are admin-only. Earlier we allowed any signed-in
+    // user whose UID matched `agencyId` to create a transaction "for their own
+    // agency" (commented as the admin top-up UI), but combined with the batched
+    // increment on `agencies/{uid}.credits` in client code, this lets an active
+    // agency self-grant unlimited credits with one direct writeBatch call.
+    // Cloud Functions Admin SDK bypasses these rules — that's the only place
+    // credits should ever change.
     match /creditTransactions/{id} {
       allow read: if isSignedIn() && (
         resource.data.agencyId == request.auth.uid || isAdmin()
       );
-      // Client may only create a transaction for their own agency (e.g. admin top-up UI)
-      allow create: if isSignedIn() && request.resource.data.agencyId == request.auth.uid;
-      allow update, delete: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     // ------- default deny -------

@@ -4,6 +4,7 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { firebaseAuth } from '@/lib/firebase';
 import { Input } from '@/components/ui/Field';
 import { useAuth } from '@/contexts/AuthContext';
+import { friendlyAuthError } from '@/lib/util';
 
 function LockIcon() {
   return (
@@ -30,7 +31,7 @@ export default function AdminLogin() {
       await refresh();
       nav('/admin', { replace: true });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Invalid credentials');
+      setErr(friendlyAuthError(e, 'Invalid credentials'));
     } finally { setLoading(false); }
   }
 
